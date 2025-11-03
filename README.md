@@ -28,47 +28,47 @@ npm install smart-retry
 ### Simple Function Retry
 
 ```typescript
-import { smartRetry } from "smart-retry";
+import { smartRetry } from 'smart-retry';
 
 const result = await smartRetry(() => fetchDataFromAPI(), {
   maxRetries: 5,
   delay: 2000,
-  backoff: "exponential",
+  backoff: 'exponential',
 });
 
 if (result.success) {
-  console.log("Data:", result.data);
+  console.log('Data:', result.data);
 } else {
-  console.error("Failed after retries:", result.error);
+  console.error('Failed after retries:', result.error);
 }
 ```
 
 ### Axios Integration
 
 ```typescript
-import { createAxiosRetry } from "smart-retry";
+import { createAxiosRetry } from 'smart-retry';
 
 const axiosRetry = createAxiosRetry({
   maxRetries: 5,
   delay: 2000,
-  backoff: "exponential",
+  backoff: 'exponential',
 });
 
-const response = await axiosRetry.get("https://api.example.com/users");
+const response = await axiosRetry.get('https://api.example.com/users');
 console.log(response.data);
 ```
 
 ### Fetch Integration
 
 ```typescript
-import { createFetchRetry } from "smart-retry";
+import { createFetchRetry } from 'smart-retry';
 
 const fetchRetry = createFetchRetry({
   maxRetries: 3,
   delay: 1000,
 });
 
-const response = await fetchRetry.get("https://api.example.com/data");
+const response = await fetchRetry.get('https://api.example.com/data');
 const data = await response.json();
 ```
 
@@ -116,7 +116,7 @@ Create a Fetch client with retry support.
 interface RetryConfig {
   maxRetries?: number; // Default: 3
   delay?: number; // Default: 2000ms
-  backoff?: "exponential" | "linear" | "none"; // Default: 'exponential'
+  backoff?: 'exponential' | 'linear' | 'none'; // Default: 'exponential'
   shouldRetry?: (error: any) => boolean;
   onRetry?: (attempt: number, error: any) => void;
 }
@@ -127,12 +127,12 @@ interface RetryConfig {
 ### Custom Retry Logic
 
 ```typescript
-import { createAxiosRetry } from "smart-retry";
+import { createAxiosRetry } from 'smart-retry';
 
 const axiosRetry = createAxiosRetry({
   maxRetries: 5,
   delay: 3000,
-  backoff: "exponential",
+  backoff: 'exponential',
   shouldRetry: (error) => {
     const status = error.response?.status;
     return status === 429 || status >= 500;
@@ -149,13 +149,13 @@ const axiosRetry = createAxiosRetry({
 const axiosRetry = createAxiosRetry();
 
 try {
-  await axiosRetry.get("https://flaky-api.com/data");
+  await axiosRetry.get('https://flaky-api.com/data');
 } catch (error) {
   const manager = axiosRetry.getRetryManager();
   const failed = await manager.getFailedRequests();
 
   console.log(`${failed.length} requests logged`);
-  console.log("Log file:", manager.getLogFilePath());
+  console.log('Log file:', manager.getLogFilePath());
 }
 ```
 
@@ -170,7 +170,7 @@ const count = await manager.getFailedRequestCount();
 
 await manager.clearFailedRequests();
 
-const removed = await manager.removeFailedRequest("request-id");
+const removed = await manager.removeFailedRequest('request-id');
 ```
 
 ## 🔧 How It Works
@@ -217,6 +217,6 @@ MIT © Aubaid Farrukh
 
 ## 🔗 Links
 
-- [npm package](https://www.npmjs.com/package/smart-retry)
+- [npm package](https://www.npmjs.com/package/@aubaidfarrukh/smart-retry)
 - [GitHub repository](https://github.com/AubaidFarrukh/smart-retry)
 - [Report issues](https://github.com/AubaidFarrukh/smart-retry/issues)
