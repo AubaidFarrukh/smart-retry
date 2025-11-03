@@ -1,8 +1,8 @@
 /** @format */
 
-import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
-import { RetryManager } from "./retryManager";
-import { RetryConfig } from "./types";
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import { RetryManager } from './retryManager';
+import { RetryConfig } from './types';
 
 export class AxiosRetry {
   private retryManager: RetryManager;
@@ -22,7 +22,7 @@ export class AxiosRetry {
   }
 
   async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, method: "GET", url });
+    return this.request<T>({ ...config, method: 'GET', url });
   }
 
   async post<T = any>(
@@ -30,7 +30,7 @@ export class AxiosRetry {
     data?: any,
     config?: AxiosRequestConfig
   ): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, method: "POST", url, data });
+    return this.request<T>({ ...config, method: 'POST', url, data });
   }
 
   async put<T = any>(
@@ -38,11 +38,11 @@ export class AxiosRetry {
     data?: any,
     config?: AxiosRequestConfig
   ): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, method: "PUT", url, data });
+    return this.request<T>({ ...config, method: 'PUT', url, data });
   }
 
   async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, method: "DELETE", url });
+    return this.request<T>({ ...config, method: 'DELETE', url });
   }
 
   async patch<T = any>(
@@ -50,7 +50,7 @@ export class AxiosRetry {
     data?: any,
     config?: AxiosRequestConfig
   ): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, method: "PATCH", url, data });
+    return this.request<T>({ ...config, method: 'PATCH', url, data });
   }
 
   getRetryManager(): RetryManager {
@@ -93,16 +93,16 @@ export class FetchRetry {
   }
 
   async get(url: string, init?: RequestInit): Promise<Response> {
-    return this.fetch(url, { ...init, method: "GET" });
+    return this.fetch(url, { ...init, method: 'GET' });
   }
 
   async post(url: string, body?: any, init?: RequestInit): Promise<Response> {
     return this.fetch(url, {
       ...init,
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify(body),
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
         ...init?.headers,
       },
     });
@@ -111,26 +111,26 @@ export class FetchRetry {
   async put(url: string, body?: any, init?: RequestInit): Promise<Response> {
     return this.fetch(url, {
       ...init,
-      method: "PUT",
+      method: 'PUT',
       body: JSON.stringify(body),
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
         ...init?.headers,
       },
     });
   }
 
   async delete(url: string, init?: RequestInit): Promise<Response> {
-    return this.fetch(url, { ...init, method: "DELETE" });
+    return this.fetch(url, { ...init, method: 'DELETE' });
   }
 
   async patch(url: string, body?: any, init?: RequestInit): Promise<Response> {
     return this.fetch(url, {
       ...init,
-      method: "PATCH",
+      method: 'PATCH',
       body: JSON.stringify(body),
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
         ...init?.headers,
       },
     });

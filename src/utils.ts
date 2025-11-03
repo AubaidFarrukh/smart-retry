@@ -1,6 +1,6 @@
 /** @format */
 
-import { randomUUID } from "crypto";
+import { randomUUID } from 'crypto';
 
 export function generateId(): string {
   return randomUUID();
@@ -9,14 +9,14 @@ export function generateId(): string {
 export function calculateDelay(
   baseDelay: number,
   attempt: number,
-  backoff: "exponential" | "linear" | "none"
+  backoff: 'exponential' | 'linear' | 'none'
 ): number {
   switch (backoff) {
-    case "exponential":
+    case 'exponential':
       return baseDelay * Math.pow(2, attempt - 1);
-    case "linear":
+    case 'linear':
       return baseDelay * attempt;
-    case "none":
+    case 'none':
       return baseDelay;
     default:
       return baseDelay;
@@ -27,10 +27,10 @@ export function defaultShouldRetry(error: any): boolean {
   if (!error) return false;
 
   if (
-    error.code === "ECONNREFUSED" ||
-    error.code === "ETIMEDOUT" ||
-    error.code === "ENOTFOUND" ||
-    error.code === "ECONNRESET"
+    error.code === 'ECONNREFUSED' ||
+    error.code === 'ETIMEDOUT' ||
+    error.code === 'ENOTFOUND' ||
+    error.code === 'ECONNRESET'
   ) {
     return true;
   }

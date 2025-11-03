@@ -1,6 +1,6 @@
 /** @format */
-import { RetryConfig, RetryResult, RetryableFunction, FailedRequest } from "./types";
-import { FileStore } from "./fileStore";
+import { RetryConfig, RetryResult, RetryableFunction, FailedRequest } from './types';
+import { FileStore } from './fileStore';
 import {
   generateId,
   calculateDelay,
@@ -8,7 +8,7 @@ import {
   sleep,
   getErrorMessage,
   getStatusCode,
-} from "./utils";
+} from './utils';
 
 export class RetryManager {
   private config: Required<RetryConfig>;
@@ -18,7 +18,7 @@ export class RetryManager {
     this.config = {
       maxRetries: config.maxRetries ?? 3,
       delay: config.delay ?? 2000,
-      backoff: config.backoff ?? "exponential",
+      backoff: config.backoff ?? 'exponential',
       shouldRetry: config.shouldRetry ?? defaultShouldRetry,
       onRetry: config.onRetry ?? (() => {}),
     };
@@ -100,11 +100,11 @@ export class RetryManager {
     if (error.request?.path) {
       return error.request.path;
     }
-    return "unknown";
+    return 'unknown';
   }
 
   private extractMethod(error: any): string {
-    return error.config?.method?.toUpperCase() || "GET";
+    return error.config?.method?.toUpperCase() || 'GET';
   }
 
   async getFailedRequests(): Promise<FailedRequest[]> {

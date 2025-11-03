@@ -1,31 +1,31 @@
 /** @format */
 
-import fs from "fs";
-import path from "path";
-import { FailedRequest } from "./types";
+import fs from 'fs';
+import path from 'path';
+import { FailedRequest } from './types';
 
 export class FileStore {
   private filePath: string;
 
   constructor(filePath?: string) {
-    this.filePath = filePath || path.join(process.cwd(), "smart-retry-log.json");
+    this.filePath = filePath || path.join(process.cwd(), 'smart-retry-log.json');
     this.ensureFileExists();
   }
 
   private ensureFileExists(): void {
     if (!fs.existsSync(this.filePath)) {
-      fs.writeFileSync(this.filePath, JSON.stringify([], null, 2), "utf-8");
+      fs.writeFileSync(this.filePath, JSON.stringify([], null, 2), 'utf-8');
     }
   }
 
   async save(request: FailedRequest): Promise<void> {
     const logs = await this.loadAll();
     logs.push(request);
-    fs.writeFileSync(this.filePath, JSON.stringify(logs, null, 2), "utf-8");
+    fs.writeFileSync(this.filePath, JSON.stringify(logs, null, 2), 'utf-8');
   }
 
   async loadAll(): Promise<FailedRequest[]> {
-    const content = fs.readFileSync(this.filePath, "utf-8");
+    const content = fs.readFileSync(this.filePath, 'utf-8');
     return JSON.parse(content);
   }
 
@@ -42,12 +42,12 @@ export class FileStore {
       return false;
     }
 
-    fs.writeFileSync(this.filePath, JSON.stringify(filtered, null, 2), "utf-8");
+    fs.writeFileSync(this.filePath, JSON.stringify(filtered, null, 2), 'utf-8');
     return true;
   }
 
   async clear(): Promise<void> {
-    fs.writeFileSync(this.filePath, JSON.stringify([], null, 2), "utf-8");
+    fs.writeFileSync(this.filePath, JSON.stringify([], null, 2), 'utf-8');
   }
 
   async count(): Promise<number> {

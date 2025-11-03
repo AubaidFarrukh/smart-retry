@@ -3,7 +3,7 @@
 export interface RetryConfig {
   maxRetries?: number;
   delay?: number;
-  backoff?: "exponential" | "linear" | "none";
+  backoff?: 'exponential' | 'linear' | 'none';
   shouldRetry?: (error: any) => boolean;
   onRetry?: (attempt: number, error: any) => void;
 }
