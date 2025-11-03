@@ -217,6 +217,6 @@ MIT © Aubaid Farrukh
 
 ## 🔗 Links
 
-- [npm package](https://www.npmjs.com/package/@aubaidfarrukh/smart-retry)
+- [npm package](https://www.npmjs.com/package/@aubaid/smart-retry)
 - [GitHub repository](https://github.com/AubaidFarrukh/smart-retry)
 - [Report issues](https://github.com/AubaidFarrukh/smart-retry/issues)

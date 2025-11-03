@@ -1,5 +1,5 @@
 {
-  "name": "@aubaidfarrukh/smart-retry",
+  "name": "@aubaid/smart-retry",
   "version": "1.0.0",
   "description": "Intelligent retry mechanism with exponential backoff, automatic failure logging, and replay support for HTTP requests",
   "main": "dist/index.js",
