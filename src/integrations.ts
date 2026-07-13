@@ -62,6 +62,39 @@ export function createAxiosRetry(config?: RetryConfig, storePath?: string): Axio
   return new AxiosRetry(config, storePath);
 }
 
+function isJsonSerializableBody(body: any): boolean {
+  if (body === null || body === undefined || typeof body !== 'object') {
+    return false;
+  }
+
+  if (
+    body instanceof FormData ||
+    body instanceof Blob ||
+    body instanceof URLSearchParams ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body)
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildBodyInit(body: unknown, init?: RequestInit): RequestInit {
+  if (!isJsonSerializableBody(body)) {
+    return { ...init, body: body as BodyInit | null | undefined };
+  }
+
+  return {
+    ...init,
+    body: JSON.stringify(body),
+    headers: {
+      'Content-Type': 'application/json',
+      ...init?.headers,
+    },
+  };
+}
+
 export class FetchRetry {
   private retryManager: RetryManager;
 
@@ -97,27 +130,11 @@ export class FetchRetry {
   }
 
   async post(url: string, body?: any, init?: RequestInit): Promise<Response> {
-    return this.fetch(url, {
-      ...init,
-      method: 'POST',
-      body: JSON.stringify(body),
-      headers: {
-        'Content-Type': 'application/json',
-        ...init?.headers,
-      },
-    });
+    return this.fetch(url, { ...buildBodyInit(body, init), method: 'POST' });
   }
 
   async put(url: string, body?: any, init?: RequestInit): Promise<Response> {
-    return this.fetch(url, {
-      ...init,
-      method: 'PUT',
-      body: JSON.stringify(body),
-      headers: {
-        'Content-Type': 'application/json',
-        ...init?.headers,
-      },
-    });
+    return this.fetch(url, { ...buildBodyInit(body, init), method: 'PUT' });
   }
 
   async delete(url: string, init?: RequestInit): Promise<Response> {
@@ -125,15 +142,7 @@ export class FetchRetry {
   }
 
   async patch(url: string, body?: any, init?: RequestInit): Promise<Response> {
-    return this.fetch(url, {
-      ...init,
-      method: 'PATCH',
-      body: JSON.stringify(body),
-      headers: {
-        'Content-Type': 'application/json',
-        ...init?.headers,
-      },
-    });
+    return this.fetch(url, { ...buildBodyInit(body, init), method: 'PATCH' });
   }
 
   getRetryManager(): RetryManager {
