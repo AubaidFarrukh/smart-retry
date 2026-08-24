@@ -84,3 +84,64 @@ describe('FetchRetry body serialization', () => {
     expect(init.headers).toMatchObject({ 'Content-Type': 'application/json' });
   });
 });
+
+describe('FetchRetry failure logging', () => {
+  let fetchMock: jest.Mock;
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    if (fs.existsSync(TEST_LOG_PATH)) {
+      fs.unlinkSync(TEST_LOG_PATH);
+    }
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    if (fs.existsSync(TEST_LOG_PATH)) {
+      fs.unlinkSync(TEST_LOG_PATH);
+    }
+  });
+
+  it('records the real url, method, headers, and body for a failed POST', async () => {
+    fetchMock = jest.fn().mockResolvedValue(new Response(null, { status: 500 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry({ maxRetries: 1 }, TEST_LOG_PATH);
+
+    await expect(fetchRetry.post('/orders', { id: 1 })).rejects.toThrow();
+
+    const [failure] = await fetchRetry.getRetryManager().getFailedRequests();
+    expect(failure.url).toBe('/orders');
+    expect(failure.method).toBe('POST');
+    expect(failure.headers).toMatchObject({ 'content-type': 'application/json' });
+    expect(failure.body).toBe(JSON.stringify({ id: 1 }));
+    expect(failure.statusCode).toBe(500);
+  });
+
+  it('records the real url and method for a failed DELETE', async () => {
+    fetchMock = jest.fn().mockResolvedValue(new Response(null, { status: 503 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry({ maxRetries: 1 }, TEST_LOG_PATH);
+
+    await expect(fetchRetry.delete('/orders/1')).rejects.toThrow();
+
+    const [failure] = await fetchRetry.getRetryManager().getFailedRequests();
+    expect(failure.url).toBe('/orders/1');
+    expect(failure.method).toBe('DELETE');
+  });
+
+  it('records the url and method even when fetch itself throws a network error', async () => {
+    fetchMock = jest.fn().mockRejectedValue(new TypeError('fetch failed'));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry({ maxRetries: 1 }, TEST_LOG_PATH);
+
+    await expect(fetchRetry.get('/status')).rejects.toThrow('fetch failed');
+
+    const [failure] = await fetchRetry.getRetryManager().getFailedRequests();
+    expect(failure.url).toBe('/status');
+    expect(failure.method).toBe('GET');
+    expect(failure.error).toBe('fetch failed');
+  });
+});
