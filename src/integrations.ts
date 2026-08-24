@@ -95,6 +95,27 @@ function buildBodyInit(body: unknown, init?: RequestInit): RequestInit {
   };
 }
 
+function getRequestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.toString();
+  }
+  return input.url;
+}
+
+function normalizeHeaders(headers?: HeadersInit): Record<string, string> | undefined {
+  if (!headers) {
+    return undefined;
+  }
+  const result: Record<string, string> = {};
+  new Headers(headers).forEach((value, key) => {
+    result[key] = value;
+  });
+  return result;
+}
+
 export class FetchRetry {
   private retryManager: RetryManager;
 
@@ -103,19 +124,31 @@ export class FetchRetry {
   }
 
   async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const result = await this.retryManager.execute<Response>(async () => {
-      const response = await fetch(input, init);
+    const requestConfig = {
+      url: getRequestUrl(input),
+      method: (init?.method || 'GET').toUpperCase(),
+      headers: normalizeHeaders(init?.headers),
+      data: init?.body,
+    };
 
-      if (!response.ok) {
-        const error: any = new Error(`HTTP ${response.status}: ${response.statusText}`);
-        error.response = {
-          status: response.status,
-          statusText: response.statusText,
-        };
+    const result = await this.retryManager.execute<Response>(async () => {
+      try {
+        const response = await fetch(input, init);
+
+        if (!response.ok) {
+          const error: any = new Error(`HTTP ${response.status}: ${response.statusText}`);
+          error.response = {
+            status: response.status,
+            statusText: response.statusText,
+          };
+          throw error;
+        }
+
+        return response;
+      } catch (error: any) {
+        error.config = requestConfig;
         throw error;
       }
-
-      return response;
     });
 
     if (!result.success) {
