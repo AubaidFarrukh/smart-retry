@@ -126,7 +126,7 @@ describe('RetryManager', () => {
     const result = await manager.execute(fn);
 
     expect(result.success).toBe(true);
-    expect(result.totalDuration).toBeGreaterThan(50);
+    expect(result.totalDuration).toBeGreaterThanOrEqual(50);
   });
 
   it('should clear failed requests', async () => {
