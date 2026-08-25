@@ -1,6 +1,6 @@
 {
   "name": "@aubaid/smart-retry",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "TypeScript retry library for HTTP requests with exponential/linear backoff, Axios and Fetch integrations, and automatic failure logging for later replay",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
