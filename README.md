@@ -1,29 +1,29 @@
 <!-- @format -->
 
-# 🔄 smart-retry
+# smart-retry
 
 Intelligent retry mechanism with exponential backoff, automatic failure logging, and replay support for HTTP requests.
 
-[![npm version](https://img.shields.io/npm/v/smart-retry.svg)](https://www.npmjs.com/package/smart-retry)
+[![npm version](https://img.shields.io/npm/v/%40aubaid%2Fsmart-retry.svg)](https://www.npmjs.com/package/@aubaid/smart-retry)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## ✨ Features
+## Features
 
-- 🔄 **Smart retry logic** with exponential, linear, or fixed backoff
-- 📊 **Automatic failure logging** to disk for later replay
-- 🎯 **Selective retries** — only retry transient errors (5xx, timeouts, network issues)
-- 🔌 **Easy integration** with Axios and Fetch
-- 📝 **TypeScript support** with full type definitions
-- 🪝 **Hooks and callbacks** for monitoring retry attempts
-- 🗂️ **Replay CLI** (coming soon) to retry failed requests
+- **Smart retry logic** with exponential, linear, or fixed backoff
+- **Automatic failure logging** to disk for later replay
+- **Selective retries** — only retry transient errors (5xx, timeouts, network issues)
+- **Easy integration** with Axios and Fetch
+- **TypeScript support** with full type definitions
+- **Hooks and callbacks** for monitoring retry attempts
+- **Replay CLI** (coming soon) to retry failed requests
 
-## 📦 Installation
+## Installation
 
 ```bash
-npm install smart-retry
+npm install @aubaid/smart-retry
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Simple Function Retry
 
@@ -72,7 +72,7 @@ const response = await fetchRetry.get('https://api.example.com/data');
 const data = await response.json();
 ```
 
-## 📖 API Reference
+## API Reference
 
 ### `smartRetry(fn, config?)`
 
@@ -122,7 +122,7 @@ interface RetryConfig {
 }
 ```
 
-## 🎯 Advanced Usage
+## Advanced Usage
 
 ### Custom Retry Logic
 
@@ -173,7 +173,7 @@ await manager.clearFailedRequests();
 const removed = await manager.removeFailedRequest('request-id');
 ```
 
-## 🔧 How It Works
+## How It Works
 
 1. **Executes your function** with automatic retry on failure
 2. **Detects transient errors** (5xx, timeouts, network issues)
@@ -181,7 +181,7 @@ const removed = await manager.removeFailedRequest('request-id');
 4. **Logs failures** to `smart-retry-log.json` after all retries exhausted
 5. **Returns result** with metadata (attempts, duration, success status)
 
-## 📝 Backoff Strategies
+## Backoff Strategies
 
 **Exponential (default):**
 
@@ -207,15 +207,15 @@ Attempt 4: 8s
 All attempts: 2s fixed delay
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
 
-## 📄 License
+## License
 
 MIT © Aubaid Farrukh
 
-## 🔗 Links
+## Links
 
 - [npm package](https://www.npmjs.com/package/@aubaid/smart-retry)
 - [GitHub repository](https://github.com/AubaidFarrukh/smart-retry)
