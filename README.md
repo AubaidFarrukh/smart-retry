@@ -2,10 +2,35 @@
 
 # smart-retry
 
-Intelligent retry mechanism with exponential backoff, automatic failure logging, and replay support for HTTP requests.
+**smart-retry** is a TypeScript retry library for HTTP requests in Node.js. It wraps any async function, Axios call, or Fetch call with exponential/linear backoff, retries only transient failures (timeouts, network errors, 5xx, 429), and automatically logs exhausted failures to disk so you can inspect or replay them later.
 
 [![npm version](https://img.shields.io/npm/v/%40aubaid%2Fsmart-retry.svg)](https://www.npmjs.com/package/@aubaid/smart-retry)
+[![npm downloads](https://img.shields.io/npm/dm/%40aubaid%2Fsmart-retry.svg)](https://www.npmjs.com/package/@aubaid/smart-retry)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## Contents
+
+- [Why smart-retry](#why-smart-retry)
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [API Reference](#api-reference)
+- [Advanced Usage](#advanced-usage)
+- [How It Works](#how-it-works)
+- [Backoff Strategies](#backoff-strategies)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [License](#license)
+- [Links](#links)
+
+## Why smart-retry
+
+Most retry libraries stop at "try again with backoff." smart-retry adds two things most others don't:
+
+- **Drop-in Axios and Fetch clients** (`createAxiosRetry`, `createFetchRetry`) instead of only a generic wrapper function, so you don't have to hand-roll the integration.
+- **Automatic failure logging** — requests that exhaust all retries are persisted to disk with their URL, method, headers, body, and error, so you can inspect or replay them after the fact instead of losing the failure the moment it's thrown.
+
+Use it when you're calling flaky third-party APIs, internal services behind a load balancer that occasionally 5xxs, or any HTTP call where a transient blip shouldn't fail the whole operation.
 
 ## Features
 
@@ -28,7 +53,7 @@ npm install @aubaid/smart-retry
 ### Simple Function Retry
 
 ```typescript
-import { smartRetry } from 'smart-retry';
+import { smartRetry } from '@aubaid/smart-retry';
 
 const result = await smartRetry(() => fetchDataFromAPI(), {
   maxRetries: 5,
@@ -46,7 +71,7 @@ if (result.success) {
 ### Axios Integration
 
 ```typescript
-import { createAxiosRetry } from 'smart-retry';
+import { createAxiosRetry } from '@aubaid/smart-retry';
 
 const axiosRetry = createAxiosRetry({
   maxRetries: 5,
@@ -61,7 +86,7 @@ console.log(response.data);
 ### Fetch Integration
 
 ```typescript
-import { createFetchRetry } from 'smart-retry';
+import { createFetchRetry } from '@aubaid/smart-retry';
 
 const fetchRetry = createFetchRetry({
   maxRetries: 3,
@@ -127,7 +152,7 @@ interface RetryConfig {
 ### Custom Retry Logic
 
 ```typescript
-import { createAxiosRetry } from 'smart-retry';
+import { createAxiosRetry } from '@aubaid/smart-retry';
 
 const axiosRetry = createAxiosRetry({
   maxRetries: 5,
@@ -206,6 +231,23 @@ Attempt 4: 8s
 ```
 All attempts: 2s fixed delay
 ```
+
+## FAQ
+
+**Does smart-retry work with both Axios and Fetch?**
+Yes — `createAxiosRetry` wraps Axios, `createFetchRetry` wraps the native `fetch` API. Both share the same retry, backoff, and failure-logging behavior.
+
+**Does it work in the browser or on edge runtimes (Vercel Edge, Cloudflare Workers)?**
+The retry and backoff logic works anywhere. The failure-logging feature writes to disk via Node's `fs` module, which isn't available in browsers or most edge runtimes; in those environments it degrades to a no-op instead of throwing, so `createFetchRetry` still works for the request itself — you just won't get an on-disk failure log.
+
+**Which errors get retried by default?**
+Network errors (`ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`, `ECONNRESET`), HTTP 408, 429, and 5xx responses. 4xx client errors (except 408/429) and errors without a recognizable network/HTTP signal are not retried by default — override this with the `shouldRetry` config option.
+
+**Where does the failure log get written?**
+To `smart-retry-log.json` in the current working directory by default, or to a custom path passed as the second argument to `createAxiosRetry`/`createFetchRetry`/`createRetryManager`.
+
+**Is there a CLI to replay failed requests?**
+Not yet — failed requests are logged with enough detail (URL, method, headers, body) to replay manually via `getFailedRequests()`. A replay CLI is planned.
 
 ## Contributing
 

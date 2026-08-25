@@ -1,7 +1,7 @@
 {
   "name": "@aubaid/smart-retry",
-  "version": "1.0.0",
-  "description": "Intelligent retry mechanism with exponential backoff, automatic failure logging, and replay support for HTTP requests",
+  "version": "1.0.2",
+  "description": "TypeScript retry library for HTTP requests with exponential/linear backoff, Axios and Fetch integrations, and automatic failure logging for later replay",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -30,6 +30,8 @@
   "keywords": [
     "retry",
     "exponential-backoff",
+    "linear-backoff",
+    "backoff-strategy",
     "http-retry",
     "axios-retry",
     "fetch-retry",
@@ -37,11 +39,13 @@
     "api-retry",
     "resilience",
     "fault-tolerance",
-    "circuit-breaker",
     "error-handling",
     "network-retry",
     "transient-errors",
-    "rate-limiting"
+    "typescript",
+    "promise",
+    "async-await",
+    "failure-logging"
   ],
   "author": "Aubaid Farrukh",
   "license": "MIT",
