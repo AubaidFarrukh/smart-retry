@@ -16,7 +16,10 @@
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
     "prepare": "husky",
-    "prepublishOnly": "npm run clean && npm run build && npm test"
+    "preversion": "npm test",
+    "postversion": "git push && git push --tags",
+    "prepublishOnly": "npm run clean && npm run build && npm test",
+    "tag": "git tag v$npm_package_version && git push origin v$npm_package_version"
   },
   "lint-staged": {
     ".ts": [
