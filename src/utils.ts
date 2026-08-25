@@ -36,7 +36,7 @@ export function defaultShouldRetry(error: any): boolean {
   }
 
   const status = error.response?.status;
-  if (!status) return true;
+  if (!status) return false;
 
   if (status === 408 || status === 429 || (status >= 500 && status < 600)) {
     return true;
