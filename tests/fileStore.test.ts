@@ -168,4 +168,51 @@ describe('FileStore', () => {
   it('should return correct file path', () => {
     expect(store.getFilePath()).toBe(TEST_LOG_PATH);
   });
+
+  describe('when the filesystem is unavailable', () => {
+    let existsSyncSpy: jest.SpyInstance;
+    let writeFileSyncSpy: jest.SpyInstance;
+    let readFileSyncSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      existsSyncSpy = jest.spyOn(fs, 'existsSync').mockImplementation(() => {
+        throw new Error('fs unavailable');
+      });
+      writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+        throw new Error('EROFS: read-only file system');
+      });
+      readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+        throw new Error('fs unavailable');
+      });
+    });
+
+    afterEach(() => {
+      existsSyncSpy.mockRestore();
+      writeFileSyncSpy.mockRestore();
+      readFileSyncSpy.mockRestore();
+    });
+
+    it('should not throw on construction', () => {
+      expect(() => new FileStore(TEST_LOG_PATH)).not.toThrow();
+    });
+
+    it('should degrade to a no-op instead of rejecting', async () => {
+      const unusableStore = new FileStore(TEST_LOG_PATH);
+      const request: FailedRequest = {
+        id: 'test-1',
+        url: 'https://api.example.com/1',
+        method: 'GET',
+        error: 'Error',
+        attempts: 1,
+        totalDuration: 1000,
+        timestamp: new Date().toISOString(),
+      };
+
+      await expect(unusableStore.save(request)).resolves.toBeUndefined();
+      await expect(unusableStore.loadAll()).resolves.toEqual([]);
+      await expect(unusableStore.remove('test-1')).resolves.toBe(false);
+      await expect(unusableStore.clear()).resolves.toBeUndefined();
+      await expect(unusableStore.count()).resolves.toBe(0);
+    });
+  });
 });
