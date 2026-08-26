@@ -144,4 +144,27 @@ describe('FetchRetry failure logging', () => {
     expect(failure.method).toBe('GET');
     expect(failure.error).toBe('fetch failed');
   });
+
+  it('does not crash on construction or use when the filesystem is unavailable', async () => {
+    fetchMock = jest.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockImplementation(() => {
+      throw new Error('fs unavailable');
+    });
+    const writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+      throw new Error('fs unavailable');
+    });
+
+    try {
+      expect(() => new FetchRetry({ maxRetries: 1 }, TEST_LOG_PATH)).not.toThrow();
+
+      const unusableFsRetry = new FetchRetry({ maxRetries: 1 }, TEST_LOG_PATH);
+      const response = await unusableFsRetry.get('/status');
+      expect(response.status).toBe(200);
+    } finally {
+      existsSyncSpy.mockRestore();
+      writeFileSyncSpy.mockRestore();
+    }
+  });
 });

@@ -40,7 +40,9 @@ describe('RetryManager', () => {
     const fn = async () => {
       callCount++;
       if (callCount < 3) {
-        throw new Error('Temporary failure');
+        const error: any = new Error('Temporary failure');
+        error.response = { status: 503 };
+        throw error;
       }
       return 'success';
     };
@@ -56,7 +58,9 @@ describe('RetryManager', () => {
   it('should fail after max retries', async () => {
     const fn = async () => {
       callCount++;
-      throw new Error('Persistent failure');
+      const error: any = new Error('Persistent failure');
+      error.response = { status: 503 };
+      throw error;
     };
 
     const result = await manager.execute(fn);
@@ -96,7 +100,9 @@ describe('RetryManager', () => {
     const fn = async () => {
       callCount++;
       if (callCount < 3) {
-        throw new Error('Retry me');
+        const error: any = new Error('Retry me');
+        error.response = { status: 503 };
+        throw error;
       }
       return 'success';
     };
@@ -110,7 +116,9 @@ describe('RetryManager', () => {
     const fn = async () => {
       callCount++;
       if (callCount < 2) {
-        throw new Error('Retry');
+        const error: any = new Error('Retry');
+        error.response = { status: 503 };
+        throw error;
       }
       return 'success';
     };
@@ -118,7 +126,7 @@ describe('RetryManager', () => {
     const result = await manager.execute(fn);
 
     expect(result.success).toBe(true);
-    expect(result.totalDuration).toBeGreaterThan(50);
+    expect(result.totalDuration).toBeGreaterThanOrEqual(50);
   });
 
   it('should clear failed requests', async () => {

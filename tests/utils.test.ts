@@ -74,6 +74,11 @@ describe('Utils', () => {
       expect(defaultShouldRetry(null)).toBe(false);
       expect(defaultShouldRetry(undefined)).toBe(false);
     });
+
+    it('should not retry on errors without a status or known network code', () => {
+      expect(defaultShouldRetry(new TypeError('Cannot read properties of undefined'))).toBe(false);
+      expect(defaultShouldRetry({ message: 'boom' })).toBe(false);
+    });
   });
 
   describe('sleep', () => {

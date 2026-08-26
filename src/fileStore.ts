@@ -13,13 +13,17 @@ export class FileStore {
   }
 
   private ensureFileExists(): void {
-    if (!fs.existsSync(this.filePath)) {
-      fs.writeFileSync(this.filePath, JSON.stringify([], null, 2), 'utf-8');
+    try {
+      if (!fs.existsSync(this.filePath)) {
+        fs.writeFileSync(this.filePath, JSON.stringify([], null, 2), 'utf-8');
+      }
+    } catch {
+      // fs is unavailable or read-only (browser, edge runtime, serverless FS).
+      // Failure logging degrades to a no-op instead of crashing construction.
     }
   }
 
   async save(request: FailedRequest): Promise<void> {
-    // 1. Check if rotation is needed BEFORE reading/writing
     this.rotateIfNeeded();
 
     const logs = await this.loadAll();
@@ -42,8 +46,12 @@ export class FileStore {
   }
 
   async loadAll(): Promise<FailedRequest[]> {
-    const content = fs.readFileSync(this.filePath, 'utf-8');
-    return JSON.parse(content);
+    try {
+      const content = fs.readFileSync(this.filePath, 'utf-8');
+      return JSON.parse(content);
+    } catch {
+      return [];
+    }
   }
 
   async findById(id: string): Promise<FailedRequest | undefined> {
@@ -52,19 +60,27 @@ export class FileStore {
   }
 
   async remove(id: string): Promise<boolean> {
-    const logs = await this.loadAll();
-    const filtered = logs.filter((log) => log.id !== id);
+    try {
+      const logs = await this.loadAll();
+      const filtered = logs.filter((log) => log.id !== id);
 
-    if (filtered.length === logs.length) {
+      if (filtered.length === logs.length) {
+        return false;
+      }
+
+      fs.writeFileSync(this.filePath, JSON.stringify(filtered, null, 2), 'utf-8');
+      return true;
+    } catch {
       return false;
     }
-
-    fs.writeFileSync(this.filePath, JSON.stringify(filtered, null, 2), 'utf-8');
-    return true;
   }
 
   async clear(): Promise<void> {
-    fs.writeFileSync(this.filePath, JSON.stringify([], null, 2), 'utf-8');
+    try {
+      fs.writeFileSync(this.filePath, JSON.stringify([], null, 2), 'utf-8');
+    } catch {
+      // best-effort logging; ignore write failures
+    }
   }
 
   async count(): Promise<number> {

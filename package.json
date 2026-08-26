@@ -1,7 +1,7 @@
 {
   "name": "@aubaid/smart-retry",
-  "version": "1.0.0",
-  "description": "Intelligent retry mechanism with exponential backoff, automatic failure logging, and replay support for HTTP requests",
+  "version": "1.0.3",
+  "description": "TypeScript retry library for HTTP requests with exponential/linear backoff, Axios and Fetch integrations, and automatic failure logging for later replay",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -16,7 +16,10 @@
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
     "prepare": "husky",
-    "prepublishOnly": "npm run clean && npm run build && npm test"
+    "preversion": "npm test",
+    "postversion": "git push && git push --tags",
+    "prepublishOnly": "npm run clean && npm run build && npm test",
+    "tag": "git tag v$npm_package_version && git push origin v$npm_package_version"
   },
   "lint-staged": {
     ".ts": [
@@ -30,6 +33,8 @@
   "keywords": [
     "retry",
     "exponential-backoff",
+    "linear-backoff",
+    "backoff-strategy",
     "http-retry",
     "axios-retry",
     "fetch-retry",
@@ -37,11 +42,13 @@
     "api-retry",
     "resilience",
     "fault-tolerance",
-    "circuit-breaker",
     "error-handling",
     "network-retry",
     "transient-errors",
-    "rate-limiting"
+    "typescript",
+    "promise",
+    "async-await",
+    "failure-logging"
   ],
   "author": "Aubaid Farrukh",
   "license": "MIT",
