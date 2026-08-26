@@ -102,5 +102,4 @@ export class FileStore {
     // 4. Create a fresh, empty active log
     this.ensureFileExists();
   }
-
 }
