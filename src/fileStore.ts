@@ -24,12 +24,24 @@ export class FileStore {
   }
 
   async save(request: FailedRequest): Promise<void> {
+    // 1. Check if rotation is needed BEFORE reading/writing
+    this.rotateIfNeeded();
+
+    const logs = await this.loadAll();
+    logs.push(request);
+    fs.writeFileSync(this.filePath, JSON.stringify(logs, null, 2), 'utf-8');
+  }
+
+  private rotateIfNeeded(): void {
+    if (!this.maxFileSizeBytes) return;
+
     try {
-      const logs = await this.loadAll();
-      logs.push(request);
-      fs.writeFileSync(this.filePath, JSON.stringify(logs, null, 2), 'utf-8');
-    } catch {
-      // best-effort logging; ignore write failures
+      const stats = fs.statSync(this.filePath);
+      if (stats.size >= this.maxFileSizeBytes) {
+        this.rotateFiles();
+      }
+    } catch (err) {
+      // File might not exist yet, ignore stat errors
     }
   }
 
@@ -78,5 +90,32 @@ export class FileStore {
 
   getFilePath(): string {
     return this.filePath;
+  }
+
+  private rotateFiles(): void {
+    const dir = path.dirname(this.filePath);
+    const baseName = path.basename(this.filePath, '.json');
+
+    // 1. Delete the oldest file if it exceeds maxFiles
+    const oldestFile = path.join(dir, `${baseName}.${this.maxFiles}.json`);
+    if (fs.existsSync(oldestFile)) {
+      fs.unlinkSync(oldestFile);
+    }
+
+    // 2. Shift existing rotated files (e.g., .4 -> .5, .3 -> .4)
+    for (let i = this.maxFiles - 1; i >= 1; i--) {
+      const current = path.join(dir, `${baseName}.${i}.json`);
+      const next = path.join(dir, `${baseName}.${i + 1}.json`);
+      if (fs.existsSync(current)) {
+        fs.renameSync(current, next);
+      }
+    }
+
+    // 3. Rename the current active log to .1
+    const rotatedName = path.join(dir, `${baseName}.1.json`);
+    fs.renameSync(this.filePath, rotatedName);
+
+    // 4. Create a fresh, empty active log
+    this.ensureFileExists();
   }
 }
