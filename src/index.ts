@@ -7,7 +7,7 @@ export * from './utils';
 export * from './integrations';
 
 import { RetryManager } from './retryManager';
-import { RetryConfig, RetryableFunction, RetryResult,FileStoreConfig } from './types';
+import { RetryConfig, RetryableFunction, RetryResult, FileStoreConfig } from './types';
 
 export function smartRetry<T>(
   fn: RetryableFunction<T>,
@@ -17,7 +17,11 @@ export function smartRetry<T>(
   return manager.execute(fn);
 }
 
-export function createRetryManager(config?: RetryConfig, storePath?: string, storeConfig?: FileStoreConfig): RetryManager {
+export function createRetryManager(
+  config?: RetryConfig,
+  storePath?: string,
+  storeConfig?: FileStoreConfig
+): RetryManager {
   return new RetryManager(config, storePath, storeConfig);
 }
 
