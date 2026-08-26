@@ -29,4 +29,9 @@ export interface RetryResult<T> {
   totalDuration: number;
 }
 
+export interface FileStoreConfig {
+  maxFileSizeBytes?: number;
+  maxFiles?: number;
+}
+
 export type RetryableFunction<T> = () => Promise<T>;
