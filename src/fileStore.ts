@@ -2,13 +2,17 @@
 
 import fs from 'fs';
 import path from 'path';
-import { FailedRequest } from './types';
+import { FailedRequest, FileStoreConfig } from './types';
 
 export class FileStore {
   private filePath: string;
+  private maxFileSizeBytes?: number;
+  private maxFiles: number;
 
-  constructor(filePath?: string) {
+  constructor(filePath?: string, storeConfig?: FileStoreConfig) {
     this.filePath = filePath || path.join(process.cwd(), 'smart-retry-log.json');
+    this.maxFileSizeBytes = storeConfig?.maxFileSizeBytes;
+    this.maxFiles = storeConfig?.maxFiles ?? 5;
     this.ensureFileExists();
   }
 
@@ -18,18 +22,32 @@ export class FileStore {
         fs.writeFileSync(this.filePath, JSON.stringify([], null, 2), 'utf-8');
       }
     } catch {
-      // fs is unavailable or read-only (browser, edge runtime, serverless FS).
-      // Failure logging degrades to a no-op instead of crashing construction.
+      // fs unavailable or read-only (browser, edge runtime, serverless FS); degrade to no-op.
     }
   }
 
   async save(request: FailedRequest): Promise<void> {
     try {
+      this.rotateIfNeeded();
+
       const logs = await this.loadAll();
       logs.push(request);
       fs.writeFileSync(this.filePath, JSON.stringify(logs, null, 2), 'utf-8');
     } catch {
       // best-effort logging; ignore write failures
+    }
+  }
+
+  private rotateIfNeeded(): void {
+    if (!this.maxFileSizeBytes) return;
+
+    try {
+      const stats = fs.statSync(this.filePath);
+      if (stats.size >= this.maxFileSizeBytes) {
+        this.rotateFiles();
+      }
+    } catch {
+      // File might not exist yet, ignore stat errors
     }
   }
 
@@ -78,5 +96,28 @@ export class FileStore {
 
   getFilePath(): string {
     return this.filePath;
+  }
+
+  private rotateFiles(): void {
+    const dir = path.dirname(this.filePath);
+    const baseName = path.basename(this.filePath, '.json');
+
+    const oldestFile = path.join(dir, `${baseName}.${this.maxFiles}.json`);
+    if (fs.existsSync(oldestFile)) {
+      fs.unlinkSync(oldestFile);
+    }
+
+    for (let i = this.maxFiles - 1; i >= 1; i--) {
+      const current = path.join(dir, `${baseName}.${i}.json`);
+      const next = path.join(dir, `${baseName}.${i + 1}.json`);
+      if (fs.existsSync(current)) {
+        fs.renameSync(current, next);
+      }
+    }
+
+    const rotatedName = path.join(dir, `${baseName}.1.json`);
+    fs.renameSync(this.filePath, rotatedName);
+
+    this.ensureFileExists();
   }
 }

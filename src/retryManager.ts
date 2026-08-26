@@ -1,5 +1,11 @@
 /** @format */
-import { RetryConfig, RetryResult, RetryableFunction, FailedRequest } from './types';
+import {
+  RetryConfig,
+  RetryResult,
+  RetryableFunction,
+  FailedRequest,
+  FileStoreConfig,
+} from './types';
 import { FileStore } from './fileStore';
 import {
   generateId,
@@ -14,7 +20,7 @@ export class RetryManager {
   private config: Required<RetryConfig>;
   private store: FileStore;
 
-  constructor(config: RetryConfig = {}, storePath?: string) {
+  constructor(config: RetryConfig = {}, storePath?: string, storeConfig?: FileStoreConfig) {
     this.config = {
       maxRetries: config.maxRetries ?? 3,
       delay: config.delay ?? 2000,
@@ -23,7 +29,7 @@ export class RetryManager {
       onRetry: config.onRetry ?? (() => {}),
     };
 
-    this.store = new FileStore(storePath);
+    this.store = new FileStore(storePath, storeConfig);
   }
 
   async execute<T>(fn: RetryableFunction<T>): Promise<RetryResult<T>> {
