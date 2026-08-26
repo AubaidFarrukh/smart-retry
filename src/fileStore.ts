@@ -37,6 +37,7 @@ export class FileStore {
       }
     } catch (err) {
       // File might not exist yet, ignore stat errors
+      console.log('Error checking file size for rotation:', err);
     }
   }
 
