@@ -9,18 +9,25 @@ export function generateId(): string {
 export function calculateDelay(
   baseDelay: number,
   attempt: number,
-  backoff: 'exponential' | 'linear' | 'none'
+  backoff: 'exponential' | 'linear' | 'none',
+  maxDelay?: number
 ): number {
+  let delay: number;
   switch (backoff) {
     case 'exponential':
-      return baseDelay * Math.pow(2, attempt - 1);
+      delay = baseDelay * Math.pow(2, attempt - 1);
+      break;
     case 'linear':
-      return baseDelay * attempt;
+      delay = baseDelay * attempt;
+      break;
     case 'none':
-      return baseDelay;
+      delay = baseDelay;
+      break;
     default:
-      return baseDelay;
+      delay = baseDelay;
+      break;
   }
+  return maxDelay ? Math.min(delay, maxDelay) : delay;
 }
 
 export function defaultShouldRetry(error: any): boolean {

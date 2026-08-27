@@ -1,0 +1,88 @@
+[1mdiff --git a/README.md b/README.md[m
+[1mindex 833939a..7fce8ac 100644[m
+[1m--- a/README.md[m
+[1m+++ b/README.md[m
+[36m@@ -148,6 +148,7 @@[m [mCreate a Fetch client with retry support.[m
+ interface RetryConfig {[m
+   maxRetries?: number; // Default: 3[m
+   delay?: number; // Default: 2000ms[m
+[32m+[m[32m  maxDelay?: number; // Default: 10000ms[m
+   backoff?: 'exponential' | 'linear' | 'none'; // Default: 'exponential'[m
+   shouldRetry?: (error: any) => boolean;[m
+   onRetry?: (attempt: number, error: any) => void;[m
+[1mdiff --git a/src/retryManager.ts b/src/retryManager.ts[m
+[1mindex e6930bb..c7f4ff6 100644[m
+[1m--- a/src/retryManager.ts[m
+[1m+++ b/src/retryManager.ts[m
+[36m@@ -23,10 +23,11 @@[m [mexport class RetryManager {[m
+   constructor(config: RetryConfig = {}, storePath?: string, storeConfig?: FileStoreConfig) {[m
+     this.config = {[m
+       maxRetries: config.maxRetries ?? 3,[m
+[32m+[m[32m      maxDelay: config.maxDelay ?? 10000,[m
+       delay: config.delay ?? 2000,[m
+       backoff: config.backoff ?? 'exponential',[m
+       shouldRetry: config.shouldRetry ?? defaultShouldRetry,[m
+[31m-      onRetry: config.onRetry ?? (() => {}),[m
+[32m+[m[32m      onRetry: config.onRetry ?? (() => { }),[m
+     };[m
+ [m
+     this.store = new FileStore(storePath, storeConfig);[m
+[36m@@ -58,7 +59,7 @@[m [mexport class RetryManager {[m
+         }[m
+ [m
+         if (attempts < this.config.maxRetries) {[m
+[31m-          const delay = calculateDelay(this.config.delay, attempts, this.config.backoff);[m
+[32m+[m[32m          const delay = calculateDelay(this.config.delay, attempts, this.config.backoff, this.config.maxDelay);[m
+           this.config.onRetry(attempts, error);[m
+           await sleep(delay);[m
+         }[m
+[1mdiff --git a/src/types.ts b/src/types.ts[m
+[1mindex 88603c3..8ec3601 100644[m
+[1m--- a/src/types.ts[m
+[1m+++ b/src/types.ts[m
+[36m@@ -3,6 +3,7 @@[m
+ export interface RetryConfig {[m
+   maxRetries?: number;[m
+   delay?: number;[m
+[32m+[m[32m  maxDelay?: number;[m
+   backoff?: 'exponential' | 'linear' | 'none';[m
+   shouldRetry?: (error: any) => boolean;[m
+   onRetry?: (attempt: number, error: any) => void;[m
+[1mdiff --git a/src/utils.ts b/src/utils.ts[m
+[1mindex eba3747..ddbef2c 100644[m
+[1m--- a/src/utils.ts[m
+[1m+++ b/src/utils.ts[m
+[36m@@ -9,20 +9,28 @@[m [mexport function generateId(): string {[m
+ export function calculateDelay([m
+   baseDelay: number,[m
+   attempt: number,[m
+[31m-  backoff: 'exponential' | 'linear' | 'none'[m
+[32m+[m[32m  backoff: 'exponential' | 'linear' | 'none',[m
+[32m+[m[32m  maxDelay?: number[m
+ ): number {[m
+[32m+[m[32m  let delay: number;[m
+   switch (backoff) {[m
+     case 'exponential':[m
+[31m-      return baseDelay * Math.pow(2, attempt - 1);[m
+[32m+[m[32m      delay = baseDelay * Math.pow(2, attempt - 1);[m
+[32m+[m[32m      break;[m
+     case 'linear':[m
+[31m-      return baseDelay * attempt;[m
+[32m+[m[32m      delay = baseDelay * attempt;[m
+[32m+[m[32m      break;[m
+     case 'none':[m
+[31m-      return baseDelay;[m
+[32m+[m[32m      delay = baseDelay;[m
+[32m+[m[32m      break;[m
+     default:[m
+[31m-      return baseDelay;[m
+[32m+[m[32m      delay = baseDelay;[m
+[32m+[m[32m      break;[m
+   }[m
+[32m+[m[32m  return maxDelay ? Math.min(delay, maxDelay) : delay;[m
+ }[m
+ [m
+[32m+[m
+ export function defaultShouldRetry(error: any): boolean {[m
+   if (!error) return false;[m
+ [m
