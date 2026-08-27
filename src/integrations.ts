@@ -1,18 +1,32 @@
 /** @format */
 
-import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { RetryManager } from './retryManager';
 import { RetryConfig } from './types';
 
+function loadAxios(): AxiosInstance {
+  try {
+    return require('axios');
+  } catch {
+    throw new Error(
+      "AxiosRetry requires the 'axios' package. Install it with `npm install axios`."
+    );
+  }
+}
+
 export class AxiosRetry {
   private retryManager: RetryManager;
+  private axios: AxiosInstance;
 
   constructor(config?: RetryConfig, storePath?: string) {
     this.retryManager = new RetryManager(config, storePath);
+    this.axios = loadAxios();
   }
 
   async request<T = any>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    const result = await this.retryManager.execute<AxiosResponse<T>>(() => axios.request(config));
+    const result = await this.retryManager.execute<AxiosResponse<T>>(() =>
+      this.axios.request(config)
+    );
 
     if (!result.success) {
       throw result.error;

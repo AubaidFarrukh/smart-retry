@@ -4,6 +4,7 @@
 
 **smart-retry** is a TypeScript retry library for HTTP requests in Node.js. It wraps any async function, Axios call, or Fetch call with exponential/linear backoff, retries only transient failures (timeouts, network errors, 5xx, 429), and automatically logs exhausted failures to disk so you can inspect or replay them later.
 
+[![CI](https://github.com/AubaidFarrukh/smart-retry/actions/workflows/ci.yml/badge.svg)](https://github.com/AubaidFarrukh/smart-retry/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/%40aubaid%2Fsmart-retry.svg)](https://www.npmjs.com/package/@aubaid/smart-retry)
 [![npm downloads](https://img.shields.io/npm/dm/%40aubaid%2Fsmart-retry.svg)](https://www.npmjs.com/package/@aubaid/smart-retry)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -69,6 +70,12 @@ if (result.success) {
 ```
 
 ### Axios Integration
+
+`axios` is an optional peer dependency — install it if you want to use `createAxiosRetry`:
+
+```bash
+npm install axios
+```
 
 ```typescript
 import { createAxiosRetry } from '@aubaid/smart-retry';
@@ -251,7 +258,7 @@ Not yet — failed requests are logged with enough detail (URL, method, headers,
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup, commit conventions, and PR process. Please also review the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
