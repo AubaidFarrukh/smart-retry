@@ -1,0 +1,33 @@
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: A short code snippet that reproduces the issue.
+      render: typescript
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: smart-retry version
+      placeholder: "1.0.4"
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: "20.10.0"
+    validations:
+      required: true
