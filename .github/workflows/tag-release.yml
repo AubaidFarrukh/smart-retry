@@ -1,0 +1,43 @@
+name: Tag release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check version and existing tags
+        id: check
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git ls-remote --tags origin "refs/tags/v$VERSION" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push tag
+        if: steps.check.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
+      - name: Trigger npm publish
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run publish.yml --ref main
