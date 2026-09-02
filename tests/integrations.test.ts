@@ -1,8 +1,13 @@
-import { FetchRetry } from '../src/integrations';
+import { AxiosRetry, FetchRetry } from '../src/integrations';
 import fs from 'fs';
 import path from 'path';
+import axios from 'axios';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 const TEST_LOG_PATH = path.join(__dirname, 'fetch-retry-test.json');
+const AXIOS_TEST_LOG_PATH = path.join(__dirname, 'axios-retry-test.json');
 
 describe('FetchRetry body serialization', () => {
   let fetchRetry: FetchRetry;
@@ -166,5 +171,101 @@ describe('FetchRetry failure logging', () => {
       existsSyncSpy.mockRestore();
       writeFileSyncSpy.mockRestore();
     }
+  });
+});
+
+describe('AxiosRetry', () => {
+  let axiosRetry: AxiosRetry;
+
+  beforeEach(() => {
+    if (fs.existsSync(AXIOS_TEST_LOG_PATH)) {
+      fs.unlinkSync(AXIOS_TEST_LOG_PATH);
+    }
+    mockedAxios.request = jest.fn();
+    axiosRetry = new AxiosRetry({ maxRetries: 1 }, AXIOS_TEST_LOG_PATH);
+  });
+
+  afterEach(() => {
+    if (fs.existsSync(AXIOS_TEST_LOG_PATH)) {
+      fs.unlinkSync(AXIOS_TEST_LOG_PATH);
+    }
+  });
+
+  it('resolves with the axios response on a successful request', async () => {
+    const response = { data: { hello: 'world' }, status: 200 };
+    mockedAxios.request.mockResolvedValue(response);
+
+    const result = await axiosRetry.get('/data');
+
+    expect(result).toBe(response);
+  });
+
+  it('passes the right method, url, and data through to axios.request for get/post/put/delete/patch', async () => {
+    mockedAxios.request.mockResolvedValue({ data: null, status: 200 });
+
+    await axiosRetry.get('/items');
+    expect(mockedAxios.request).toHaveBeenLastCalledWith({ method: 'GET', url: '/items' });
+
+    await axiosRetry.post('/items', { name: 'a' });
+    expect(mockedAxios.request).toHaveBeenLastCalledWith({
+      method: 'POST',
+      url: '/items',
+      data: { name: 'a' },
+    });
+
+    await axiosRetry.put('/items/1', { name: 'b' });
+    expect(mockedAxios.request).toHaveBeenLastCalledWith({
+      method: 'PUT',
+      url: '/items/1',
+      data: { name: 'b' },
+    });
+
+    await axiosRetry.delete('/items/1');
+    expect(mockedAxios.request).toHaveBeenLastCalledWith({ method: 'DELETE', url: '/items/1' });
+
+    await axiosRetry.patch('/items/1', { name: 'c' });
+    expect(mockedAxios.request).toHaveBeenLastCalledWith({
+      method: 'PATCH',
+      url: '/items/1',
+      data: { name: 'c' },
+    });
+  });
+
+  it('retries per RetryConfig and eventually throws when every attempt fails', async () => {
+    const error: any = new Error('Request failed with status code 500');
+    error.response = { status: 500, statusText: 'Internal Server Error' };
+    error.config = {
+      url: '/orders',
+      method: 'post',
+      headers: { 'content-type': 'application/json' },
+      data: JSON.stringify({ id: 1 }),
+    };
+    mockedAxios.request.mockRejectedValue(error);
+
+    const retryingAxios = new AxiosRetry({ maxRetries: 3, delay: 0 }, AXIOS_TEST_LOG_PATH);
+
+    await expect(retryingAxios.post('/orders', { id: 1 })).rejects.toThrow(
+      'Request failed with status code 500'
+    );
+    expect(mockedAxios.request).toHaveBeenCalledTimes(3);
+  });
+
+  it('logs a failed request via getRetryManager().getFailedRequests() once retries are exhausted', async () => {
+    const error: any = new Error('Request failed with status code 500');
+    error.response = { status: 500, statusText: 'Internal Server Error' };
+    error.config = {
+      url: '/orders',
+      method: 'post',
+      headers: { 'content-type': 'application/json' },
+      data: JSON.stringify({ id: 1 }),
+    };
+    mockedAxios.request.mockRejectedValue(error);
+
+    await expect(axiosRetry.post('/orders', { id: 1 })).rejects.toThrow();
+
+    const [failure] = await axiosRetry.getRetryManager().getFailedRequests();
+    expect(failure.url).toBe('/orders');
+    expect(failure.method).toBe('POST');
+    expect(failure.statusCode).toBe(500);
   });
 });
