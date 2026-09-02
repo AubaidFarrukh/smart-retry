@@ -6,6 +6,13 @@ export interface RetryConfig {
   backoff?: 'exponential' | 'linear' | 'none';
   shouldRetry?: (error: any) => boolean;
   onRetry?: (attempt: number, error: any) => void;
+  /**
+   * By default, requests using a non-idempotent method (POST, PATCH) are not
+   * retried, since the server may have already processed the request before
+   * the response was lost. Set to `true` to retry them anyway (e.g. if your
+   * endpoint is safe to call multiple times, such as via an idempotency key).
+   */
+  idempotent?: boolean;
 }
 
 export interface FailedRequest {

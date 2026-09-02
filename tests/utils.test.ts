@@ -79,6 +79,32 @@ describe('Utils', () => {
       expect(defaultShouldRetry(new TypeError('Cannot read properties of undefined'))).toBe(false);
       expect(defaultShouldRetry({ message: 'boom' })).toBe(false);
     });
+
+    it('should not retry POST/PATCH by default, even on a retryable status', () => {
+      expect(defaultShouldRetry({ response: { status: 503 }, config: { method: 'post' } })).toBe(
+        false
+      );
+      expect(defaultShouldRetry({ response: { status: 503 }, config: { method: 'PATCH' } })).toBe(
+        false
+      );
+      expect(defaultShouldRetry({ code: 'ECONNREFUSED', config: { method: 'post' } })).toBe(false);
+    });
+
+    it('should retry POST/PATCH when allowNonIdempotent is true', () => {
+      expect(
+        defaultShouldRetry({ response: { status: 503 }, config: { method: 'post' } }, true)
+      ).toBe(true);
+    });
+
+    it('should still retry GET/PUT/DELETE/HEAD/OPTIONS by default', () => {
+      for (const method of ['get', 'PUT', 'delete', 'HEAD', 'options']) {
+        expect(defaultShouldRetry({ response: { status: 503 }, config: { method } })).toBe(true);
+      }
+    });
+
+    it('should retry when no method info is present (generic smartRetry usage)', () => {
+      expect(defaultShouldRetry({ response: { status: 503 } })).toBe(true);
+    });
   });
 
   describe('sleep', () => {

@@ -151,6 +151,7 @@ interface RetryConfig {
   backoff?: 'exponential' | 'linear' | 'none'; // Default: 'exponential'
   shouldRetry?: (error: any) => boolean;
   onRetry?: (attempt: number, error: any) => void;
+  idempotent?: boolean; // Default: false — see "Which errors get retried by default?" below
 }
 ```
 
@@ -249,6 +250,9 @@ The retry and backoff logic works anywhere. The failure-logging feature writes t
 
 **Which errors get retried by default?**
 Network errors (`ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`, `ECONNRESET`), HTTP 408, 429, and 5xx responses. 4xx client errors (except 408/429) and errors without a recognizable network/HTTP signal are not retried by default — override this with the `shouldRetry` config option.
+
+**Why isn't my POST/PATCH request retrying?**
+By design. If a POST or PATCH fails after the server may have already processed it (a lost response, a mid-request network drop), blindly retrying can cause a duplicate side effect — a double charge, a duplicate order, and so on. GET, PUT, DELETE, HEAD, and OPTIONS are safe to retry and do so by default; POST and PATCH don't, unless you pass `idempotent: true` in `RetryConfig` (e.g. because your endpoint is safe to call more than once, such as via an idempotency key) or supply your own `shouldRetry`.
 
 **Where does the failure log get written?**
 To `smart-retry-log.json` in the current working directory by default, or to a custom path passed as the second argument to `createAxiosRetry`/`createFetchRetry`/`createRetryManager`.

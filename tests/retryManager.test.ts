@@ -140,4 +140,63 @@ describe('RetryManager', () => {
     await manager.clearFailedRequests();
     expect(await manager.getFailedRequestCount()).toBe(0);
   });
+
+  describe('idempotent config', () => {
+    it('does not retry a POST by default, even on a retryable status', async () => {
+      const fn = async () => {
+        callCount++;
+        const error: any = new Error('Server error');
+        error.response = { status: 503 };
+        error.config = { method: 'post' };
+        throw error;
+      };
+
+      const result = await manager.execute(fn);
+
+      expect(result.success).toBe(false);
+      expect(result.attempts).toBe(1);
+      expect(callCount).toBe(1);
+    });
+
+    it('retries a POST when idempotent: true is set', async () => {
+      const idempotentManager = new RetryManager(
+        { maxRetries: 3, delay: 50, idempotent: true },
+        TEST_LOG_PATH
+      );
+
+      const fn = async () => {
+        callCount++;
+        if (callCount < 2) {
+          const error: any = new Error('Server error');
+          error.response = { status: 503 };
+          error.config = { method: 'post' };
+          throw error;
+        }
+        return 'success';
+      };
+
+      const result = await idempotentManager.execute(fn);
+
+      expect(result.success).toBe(true);
+      expect(callCount).toBe(2);
+    });
+
+    it('still retries GET/PUT/DELETE by default', async () => {
+      const fn = async () => {
+        callCount++;
+        if (callCount < 2) {
+          const error: any = new Error('Server error');
+          error.response = { status: 503 };
+          error.config = { method: 'get' };
+          throw error;
+        }
+        return 'success';
+      };
+
+      const result = await manager.execute(fn);
+
+      expect(result.success).toBe(true);
+      expect(callCount).toBe(2);
+    });
+  });
 });
