@@ -13,6 +13,12 @@ export interface RetryConfig {
    * endpoint is safe to call multiple times, such as via an idempotency key).
    */
   idempotent?: boolean;
+  /**
+   * Adds randomization to retry delay to prevent thundering-herd issues.
+   * When enabled, delays are randomized between 50% and 100% of the computed backoff delay.
+   * Default: false
+   */
+  jitter?: boolean;
 }
 
 export interface FailedRequest {
