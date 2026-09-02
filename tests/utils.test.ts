@@ -41,6 +41,17 @@ describe('Utils', () => {
       expect(calculateDelay(1000, 2, 'none')).toBe(1000);
       expect(calculateDelay(1000, 3, 'none')).toBe(1000);
     });
+    it('should clamp the delay to maxDelay', () => {
+      // Exponential backoff clamping
+      expect(calculateDelay(1000, 1, 'exponential', 3000)).toBe(1000);
+      expect(calculateDelay(1000, 2, 'exponential', 3000)).toBe(2000);
+      expect(calculateDelay(1000, 3, 'exponential', 3000)).toBe(3000); // would be 4000
+      
+      // Linear backoff clamping
+      expect(calculateDelay(1000, 1, 'linear', 2500)).toBe(1000);
+      expect(calculateDelay(1000, 2, 'linear', 2500)).toBe(2000);
+      expect(calculateDelay(1000, 3, 'linear', 2500)).toBe(2500); // would be 3000
+    });
   });
 
   describe('defaultShouldRetry', () => {

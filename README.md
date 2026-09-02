@@ -148,6 +148,7 @@ Create a Fetch client with retry support.
 interface RetryConfig {
   maxRetries?: number; // Default: 3
   delay?: number; // Default: 2000ms
+  maxDelay?: number; // Default: 10000ms
   backoff?: 'exponential' | 'linear' | 'none'; // Default: 'exponential'
   shouldRetry?: (error: any) => boolean;
   onRetry?: (attempt: number, error: any) => void;
