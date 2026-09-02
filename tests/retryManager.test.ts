@@ -199,4 +199,29 @@ describe('RetryManager', () => {
       expect(callCount).toBe(2);
     });
   });
+
+  describe('jitter config', () => {
+    it('executes retries with jitter enabled', async () => {
+      const jitterManager = new RetryManager(
+        { maxRetries: 3, delay: 50, jitter: true },
+        TEST_LOG_PATH
+      );
+
+      const fn = async () => {
+        callCount++;
+        if (callCount < 3) {
+          const error: any = new Error('Server error');
+          error.response = { status: 503 };
+          throw error;
+        }
+        return 'success';
+      };
+
+      const result = await jitterManager.execute(fn);
+
+      expect(result.success).toBe(true);
+      expect(result.attempts).toBe(3);
+      expect(callCount).toBe(3);
+    });
+  });
 });
