@@ -26,8 +26,9 @@ export class RetryManager {
       maxDelay: config.maxDelay ?? 10000,
       delay: config.delay ?? 2000,
       backoff: config.backoff ?? 'exponential',
-      shouldRetry: config.shouldRetry ?? defaultShouldRetry,
+      shouldRetry: config.shouldRetry ?? ((error) => defaultShouldRetry(error, config.idempotent)),
       onRetry: config.onRetry ?? (() => {}),
+      idempotent: config.idempotent ?? false,
     };
 
     this.store = new FileStore(storePath, storeConfig);
