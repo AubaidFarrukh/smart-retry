@@ -49,6 +49,7 @@ describe('Utils', () => {
       expect(defaultShouldRetry({ code: 'ETIMEDOUT' })).toBe(true);
       expect(defaultShouldRetry({ code: 'ENOTFOUND' })).toBe(true);
       expect(defaultShouldRetry({ code: 'ECONNRESET' })).toBe(true);
+      expect(defaultShouldRetry({ code: 'ECONNABORTED' })).toBe(true);
     });
 
     it('should retry on 5xx errors', () => {

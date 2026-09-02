@@ -41,7 +41,8 @@ export function defaultShouldRetry(error: any, allowNonIdempotent = false): bool
     error.code === 'ECONNREFUSED' ||
     error.code === 'ETIMEDOUT' ||
     error.code === 'ENOTFOUND' ||
-    error.code === 'ECONNRESET'
+    error.code === 'ECONNRESET' ||
+    error.code === 'ECONNABORTED'
   ) {
     return true;
   }
