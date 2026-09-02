@@ -242,7 +242,10 @@ describe('AxiosRetry', () => {
     };
     mockedAxios.request.mockRejectedValue(error);
 
-    const retryingAxios = new AxiosRetry({ maxRetries: 3, delay: 0 }, AXIOS_TEST_LOG_PATH);
+    const retryingAxios = new AxiosRetry(
+      { maxRetries: 3, delay: 0, idempotent: true },
+      AXIOS_TEST_LOG_PATH
+    );
 
     await expect(retryingAxios.post('/orders', { id: 1 })).rejects.toThrow(
       'Request failed with status code 500'

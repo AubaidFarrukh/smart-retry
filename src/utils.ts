@@ -23,8 +23,19 @@ export function calculateDelay(
   }
 }
 
-export function defaultShouldRetry(error: any): boolean {
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']);
+
+export function isIdempotentMethod(method?: string): boolean {
+  if (!method) return true;
+  return IDEMPOTENT_METHODS.has(method.toUpperCase());
+}
+
+export function defaultShouldRetry(error: any, allowNonIdempotent = false): boolean {
   if (!error) return false;
+
+  if (!allowNonIdempotent && !isIdempotentMethod(error.config?.method)) {
+    return false;
+  }
 
   if (
     error.code === 'ECONNREFUSED' ||
