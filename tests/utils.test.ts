@@ -41,6 +41,36 @@ describe('Utils', () => {
       expect(calculateDelay(1000, 2, 'none')).toBe(1000);
       expect(calculateDelay(1000, 3, 'none')).toBe(1000);
     });
+
+    it('should apply jitter within 50% to 100% of calculated delay when jitter is true', () => {
+      for (let i = 0; i < 50; i++) {
+        const delay = calculateDelay(1000, 1, 'exponential', true);
+        expect(delay).toBeGreaterThanOrEqual(500);
+        expect(delay).toBeLessThanOrEqual(1000);
+      }
+
+      for (let i = 0; i < 50; i++) {
+        const delay = calculateDelay(1000, 3, 'exponential', true); // base 4000
+        expect(delay).toBeGreaterThanOrEqual(2000);
+        expect(delay).toBeLessThanOrEqual(4000);
+      }
+    });
+
+    it('should calculate deterministic jitter when Math.random is mocked', () => {
+      const originalRandom = Math.random;
+      try {
+        Math.random = () => 0;
+        expect(calculateDelay(1000, 1, 'exponential', true)).toBe(500);
+
+        Math.random = () => 1;
+        expect(calculateDelay(1000, 1, 'exponential', true)).toBe(1000);
+
+        Math.random = () => 0.5;
+        expect(calculateDelay(1000, 1, 'exponential', true)).toBe(750);
+      } finally {
+        Math.random = originalRandom;
+      }
+    });
   });
 
   describe('defaultShouldRetry', () => {

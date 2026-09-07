@@ -9,18 +9,30 @@ export function generateId(): string {
 export function calculateDelay(
   baseDelay: number,
   attempt: number,
-  backoff: 'exponential' | 'linear' | 'none'
+  backoff: 'exponential' | 'linear' | 'none',
+  jitter?: boolean
 ): number {
+  let delay: number;
   switch (backoff) {
     case 'exponential':
-      return baseDelay * Math.pow(2, attempt - 1);
+      delay = baseDelay * Math.pow(2, attempt - 1);
+      break;
     case 'linear':
-      return baseDelay * attempt;
+      delay = baseDelay * attempt;
+      break;
     case 'none':
-      return baseDelay;
+      delay = baseDelay;
+      break;
     default:
-      return baseDelay;
+      delay = baseDelay;
+      break;
   }
+
+  if (jitter) {
+    delay = delay * (0.5 + Math.random() * 0.5);
+  }
+
+  return delay;
 }
 
 const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']);

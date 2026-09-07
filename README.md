@@ -152,6 +152,7 @@ interface RetryConfig {
   shouldRetry?: (error: any) => boolean;
   onRetry?: (attempt: number, error: any) => void;
   idempotent?: boolean; // Default: false — see "Which errors get retried by default?" below
+  jitter?: boolean; // Default: false — adds randomization (50-100% of delay) to avoid thundering-herd retries
 }
 ```
 

@@ -28,6 +28,7 @@ export class RetryManager {
       shouldRetry: config.shouldRetry ?? ((error) => defaultShouldRetry(error, config.idempotent)),
       onRetry: config.onRetry ?? (() => {}),
       idempotent: config.idempotent ?? false,
+      jitter: config.jitter ?? false,
     };
 
     this.store = new FileStore(storePath, storeConfig);
@@ -59,7 +60,12 @@ export class RetryManager {
         }
 
         if (attempts < this.config.maxRetries) {
-          const delay = calculateDelay(this.config.delay, attempts, this.config.backoff);
+          const delay = calculateDelay(
+            this.config.delay,
+            attempts,
+            this.config.backoff,
+            this.config.jitter
+          );
           this.config.onRetry(attempts, error);
           await sleep(delay);
         }
