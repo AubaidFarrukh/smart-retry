@@ -5,6 +5,7 @@ export { FileStore } from './fileStore';
 export * from './types';
 export * from './utils';
 export * from './integrations';
+export * from './circuitBreaker';
 
 import { RetryManager } from './retryManager';
 import { RetryConfig, RetryableFunction, RetryResult, FileStoreConfig } from './types';

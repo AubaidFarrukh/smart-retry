@@ -41,6 +41,7 @@ Use it when you're calling flaky third-party APIs, internal services behind a lo
 - **Easy integration** with Axios and Fetch
 - **TypeScript support** with full type definitions
 - **Hooks and callbacks** for monitoring retry attempts
+- **Circuit breaker** to fail fast against a service that's fully down instead of retrying into it
 - **Replay CLI** (coming soon) to retry failed requests
 
 ## Installation
@@ -153,6 +154,12 @@ interface RetryConfig {
   onRetry?: (attempt: number, error: any) => void;
   idempotent?: boolean; // Default: false — see "Which errors get retried by default?" below
   jitter?: boolean; // Default: false — adds randomization (50-100% of delay) to avoid thundering-herd retries
+  circuitBreaker?: CircuitBreakerConfig; // Off by default — see "Circuit Breaker" below
+}
+
+interface CircuitBreakerConfig {
+  failureThreshold?: number; // Default: 5
+  cooldownMs?: number; // Default: 30000ms
 }
 ```
 
@@ -206,6 +213,32 @@ await manager.clearFailedRequests();
 
 const removed = await manager.removeFailedRequest('request-id');
 ```
+
+### Circuit Breaker
+
+Retrying with backoff is meant for transient blips — but if a service is fully down, retrying just keeps hammering it. Enabling a circuit breaker tracks consecutive failures and, once a threshold is hit, fails fast (no attempts made at all) for a cooldown period instead of retrying, then lets a single trial request through to check if the service has recovered:
+
+```typescript
+const client = createAxiosRetry({
+  maxRetries: 3,
+  circuitBreaker: {
+    failureThreshold: 5, // open the circuit after 5 consecutive failures
+    cooldownMs: 30000, // stay open for 30s before trying again
+  },
+});
+
+try {
+  await client.get('https://flaky-api.com/data');
+} catch (error) {
+  if (error.circuitOpen) {
+    // failed instantly, no request was actually attempted
+  }
+}
+
+client.getRetryManager().getCircuitState(); // 'closed' | 'open' | 'half-open'
+```
+
+The circuit is scoped to the `RetryManager` instance (i.e. per client), not per URL — if a single client calls several different endpoints, failures across all of them count toward the same breaker. Create separate clients per endpoint if you need independent breakers.
 
 ## How It Works
 
