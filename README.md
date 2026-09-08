@@ -274,6 +274,8 @@ Attempt 4: 8s
 All attempts: 2s fixed delay
 ```
 
+> **Note on `jitter`:** When `jitter: true` is enabled (see [Configuration Options](#configuration-options)), each delay is randomly multiplied by 1.0–2.0 (i.e. +50%–100%), so the actual observed delays will be larger and vary from the values above. Disable jitter for deterministic delays matching the table exactly.
+
 ## FAQ
 
 **Does smart-retry work with both Axios and Fetch?**
