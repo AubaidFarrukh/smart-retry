@@ -250,6 +250,8 @@ The circuit is scoped to the `RetryManager` instance (i.e. per client), not per 
 
 ## Backoff Strategies
 
+The delays below are the base values before jitter is applied. With `jitter: true`, each delay is randomized to 50–100% of the corresponding backoff delay.
+
 **Exponential (default):**
 
 ```
