@@ -224,4 +224,58 @@ describe('RetryManager', () => {
       expect(callCount).toBe(3);
     });
   });
+
+  describe('circuitBreaker config', () => {
+    it('does not affect calls when not configured', () => {
+      expect(manager.getCircuitState()).toBeUndefined();
+    });
+
+    it('fails fast without calling fn once the circuit is open', async () => {
+      const breakerManager = new RetryManager(
+        { maxRetries: 1, delay: 0, circuitBreaker: { failureThreshold: 2 } },
+        TEST_LOG_PATH
+      );
+
+      const fn = async () => {
+        callCount++;
+        throw new Error('Down');
+      };
+
+      await breakerManager.execute(fn);
+      await breakerManager.execute(fn);
+      expect(breakerManager.getCircuitState()).toBe('open');
+      expect(callCount).toBe(2);
+
+      const result = await breakerManager.execute(fn);
+
+      expect(result.success).toBe(false);
+      expect((result.error as any).circuitOpen).toBe(true);
+      expect(callCount).toBe(2); // fn was not called a third time
+    });
+
+    it('allows a trial request after the cooldown and closes on success', async () => {
+      const breakerManager = new RetryManager(
+        { maxRetries: 1, delay: 0, circuitBreaker: { failureThreshold: 1, cooldownMs: 20 } },
+        TEST_LOG_PATH
+      );
+
+      const fn = async () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('Down');
+        }
+        return 'recovered';
+      };
+
+      await breakerManager.execute(fn);
+      expect(breakerManager.getCircuitState()).toBe('open');
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      const result = await breakerManager.execute(fn);
+
+      expect(result.success).toBe(true);
+      expect(breakerManager.getCircuitState()).toBe('closed');
+    });
+  });
 });

@@ -7,6 +7,7 @@ import {
   FileStoreConfig,
 } from './types';
 import { FileStore } from './fileStore';
+import { CircuitBreaker, CircuitState } from './circuitBreaker';
 import {
   generateId,
   calculateDelay,
@@ -19,6 +20,7 @@ import {
 export class RetryManager {
   private config: Required<RetryConfig>;
   private store: FileStore;
+  private circuitBreaker?: CircuitBreaker;
 
   constructor(config: RetryConfig = {}, storePath?: string, storeConfig?: FileStoreConfig) {
     this.config = {
@@ -29,12 +31,31 @@ export class RetryManager {
       onRetry: config.onRetry ?? (() => {}),
       idempotent: config.idempotent ?? false,
       jitter: config.jitter ?? false,
+      circuitBreaker: config.circuitBreaker ?? {},
     };
 
     this.store = new FileStore(storePath, storeConfig);
+
+    if (config.circuitBreaker) {
+      this.circuitBreaker = new CircuitBreaker(config.circuitBreaker);
+    }
   }
 
   async execute<T>(fn: RetryableFunction<T>): Promise<RetryResult<T>> {
+    if (this.circuitBreaker && !this.circuitBreaker.canAttempt()) {
+      const error = new Error(
+        'Circuit breaker is open — too many consecutive failures, failing fast'
+      );
+      (error as any).circuitOpen = true;
+
+      return {
+        success: false,
+        error,
+        attempts: 0,
+        totalDuration: 0,
+      };
+    }
+
     const startTime = Date.now();
     let lastError: any;
     let attempts = 0;
@@ -45,6 +66,8 @@ export class RetryManager {
       try {
         const data = await fn();
         const totalDuration = Date.now() - startTime;
+
+        this.circuitBreaker?.recordSuccess();
 
         return {
           success: true,
@@ -74,6 +97,7 @@ export class RetryManager {
 
     const totalDuration = Date.now() - startTime;
 
+    this.circuitBreaker?.recordFailure();
     await this.logFailure(fn, lastError, attempts, totalDuration);
 
     return {
@@ -82,6 +106,10 @@ export class RetryManager {
       attempts,
       totalDuration,
     };
+  }
+
+  getCircuitState(): CircuitState | undefined {
+    return this.circuitBreaker?.getState();
   }
 
   private async logFailure(

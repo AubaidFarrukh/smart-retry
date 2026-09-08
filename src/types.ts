@@ -1,5 +1,7 @@
 /** @format */
 
+import { CircuitBreakerConfig } from './circuitBreaker';
+
 export interface RetryConfig {
   maxRetries?: number;
   delay?: number;
@@ -19,6 +21,12 @@ export interface RetryConfig {
    * Default: false
    */
   jitter?: boolean;
+  /**
+   * Trips the circuit open after too many consecutive failures, so calls
+   * fail fast instead of retrying against a service that's fully down.
+   * Off by default; pass an object (even `{}`) to enable with defaults.
+   */
+  circuitBreaker?: CircuitBreakerConfig;
 }
 
 export interface FailedRequest {
