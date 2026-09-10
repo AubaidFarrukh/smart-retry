@@ -113,6 +113,12 @@ describe('RetryManager', () => {
   });
 
   it('should track total duration', async () => {
+    // Uses a larger delay (200ms) with a proportional threshold (150ms) rather
+    // than asserting against the exact configured delay: real timers can fire
+    // a hair before the requested delay elapses (sub-millisecond scheduling/
+    // Date.now() rounding), which made a tight 50ms-vs-50ms assertion flaky.
+    const timedManager = new RetryManager({ maxRetries: 3, delay: 200 }, TEST_LOG_PATH);
+
     const fn = async () => {
       callCount++;
       if (callCount < 2) {
@@ -123,10 +129,10 @@ describe('RetryManager', () => {
       return 'success';
     };
 
-    const result = await manager.execute(fn);
+    const result = await timedManager.execute(fn);
 
     expect(result.success).toBe(true);
-    expect(result.totalDuration).toBeGreaterThanOrEqual(50);
+    expect(result.totalDuration).toBeGreaterThanOrEqual(150);
   });
 
   it('should clear failed requests', async () => {
