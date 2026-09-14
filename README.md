@@ -160,6 +160,8 @@ interface RetryConfig {
 interface CircuitBreakerConfig {
   failureThreshold?: number; // Default: 5
   cooldownMs?: number; // Default: 30000ms
+  onOpen?: () => void; // Called the moment the circuit trips open
+  onClose?: () => void; // Called the moment the circuit recovers to closed
 }
 ```
 
@@ -224,6 +226,8 @@ const client = createAxiosRetry({
   circuitBreaker: {
     failureThreshold: 5, // open the circuit after 5 consecutive failures
     cooldownMs: 30000, // stay open for 30s before trying again
+    onOpen: () => alertOnCall('downstream service looks down'),
+    onClose: () => alertOnCall('downstream service recovered'),
   },
 });
 
