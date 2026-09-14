@@ -7,6 +7,10 @@ export interface CircuitBreakerConfig {
   failureThreshold?: number;
   /** How long the circuit stays open before allowing a trial request. Default: 30000ms */
   cooldownMs?: number;
+  /** Called the moment the circuit trips open (threshold hit, or a half-open trial failed). */
+  onOpen?: () => void;
+  /** Called the moment the circuit recovers to closed (a half-open trial succeeded). */
+  onClose?: () => void;
 }
 
 /**
@@ -27,10 +31,14 @@ export class CircuitBreaker {
   private openedAt = 0;
   private readonly failureThreshold: number;
   private readonly cooldownMs: number;
+  private readonly onOpen?: () => void;
+  private readonly onClose?: () => void;
 
   constructor(config: CircuitBreakerConfig = {}) {
     this.failureThreshold = config.failureThreshold ?? 5;
     this.cooldownMs = config.cooldownMs ?? 30000;
+    this.onOpen = config.onOpen;
+    this.onClose = config.onClose;
   }
 
   canAttempt(): boolean {
@@ -47,8 +55,14 @@ export class CircuitBreaker {
   }
 
   recordSuccess(): void {
+    const isRecovering = this.state !== 'closed';
+
     this.consecutiveFailures = 0;
     this.state = 'closed';
+
+    if (isRecovering) {
+      this.onClose?.();
+    }
   }
 
   recordFailure(): void {
@@ -57,6 +71,7 @@ export class CircuitBreaker {
     if (this.state === 'half-open' || this.consecutiveFailures >= this.failureThreshold) {
       this.state = 'open';
       this.openedAt = Date.now();
+      this.onOpen?.();
     }
   }
 

@@ -81,4 +81,54 @@ describe('CircuitBreaker', () => {
     expect(breaker.getState()).toBe('open');
     expect(breaker.canAttempt()).toBe(false);
   });
+
+  describe('onOpen / onClose hooks', () => {
+    it('calls onOpen exactly once when the circuit trips', () => {
+      const onOpen = jest.fn();
+      const breaker = new CircuitBreaker({ failureThreshold: 2, onOpen });
+
+      breaker.recordFailure();
+      expect(onOpen).not.toHaveBeenCalled();
+
+      breaker.recordFailure();
+      expect(onOpen).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call onClose for ordinary successes while already closed', () => {
+      const onClose = jest.fn();
+      const breaker = new CircuitBreaker({ onClose });
+
+      breaker.recordSuccess();
+      breaker.recordSuccess();
+
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('calls onClose when a half-open trial succeeds', async () => {
+      const onClose = jest.fn();
+      const breaker = new CircuitBreaker({ failureThreshold: 1, cooldownMs: 20, onClose });
+
+      breaker.recordFailure();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      breaker.canAttempt();
+
+      breaker.recordSuccess();
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls onOpen again if a half-open trial fails (reopening)', async () => {
+      const onOpen = jest.fn();
+      const breaker = new CircuitBreaker({ failureThreshold: 1, cooldownMs: 20, onOpen });
+
+      breaker.recordFailure();
+      expect(onOpen).toHaveBeenCalledTimes(1);
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      breaker.canAttempt();
+      breaker.recordFailure();
+
+      expect(onOpen).toHaveBeenCalledTimes(2);
+    });
+  });
 });
