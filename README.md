@@ -160,6 +160,8 @@ interface RetryConfig {
 interface CircuitBreakerConfig {
   failureThreshold?: number; // Default: 5
   cooldownMs?: number; // Default: 30000ms
+  onOpen?: () => void; // Called the moment the circuit trips open
+  onClose?: () => void; // Called the moment the circuit recovers to closed
 }
 ```
 
@@ -224,6 +226,8 @@ const client = createAxiosRetry({
   circuitBreaker: {
     failureThreshold: 5, // open the circuit after 5 consecutive failures
     cooldownMs: 30000, // stay open for 30s before trying again
+    onOpen: () => alertOnCall('downstream service looks down'),
+    onClose: () => alertOnCall('downstream service recovered'),
   },
 });
 
@@ -249,6 +253,8 @@ The circuit is scoped to the `RetryManager` instance (i.e. per client), not per 
 5. **Returns result** with metadata (attempts, duration, success status)
 
 ## Backoff Strategies
+
+The delays below are the base values before jitter is applied. With `jitter: true`, each delay is randomized to 50–100% of the corresponding backoff delay.
 
 **Exponential (default):**
 
