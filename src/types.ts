@@ -56,3 +56,37 @@ export interface FileStoreConfig {
 }
 
 export type RetryableFunction<T> = () => Promise<T>;
+
+export interface ReplayOptions {
+  /**
+   * Non-idempotent methods (POST, PATCH) are refused by default, since the
+   * original request may have already been processed before it was logged
+   * as failed — replaying it blindly can duplicate a side effect. Pass
+   * `true` to replay anyway.
+   */
+  force?: boolean;
+  /** Remove the entry from the failure log once replayed successfully. Default: true */
+  removeOnSuccess?: boolean;
+  /** Override the logged headers for this replay only. */
+  headers?: Record<string, string>;
+  /** Override the logged body for this replay only. */
+  body?: any;
+}
+
+export interface ReplayAllOptions extends ReplayOptions {
+  /** Only replay logged requests matching this method (e.g. "GET"). */
+  method?: string;
+  /** Only replay logged requests that failed with this status code. */
+  statusCode?: number;
+  /** Report what would be replayed without making any requests. */
+  dryRun?: boolean;
+}
+
+export interface ReplayResult {
+  id: string;
+  url: string;
+  method: string;
+  success: boolean;
+  skipped?: boolean;
+  error?: any;
+}

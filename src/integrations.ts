@@ -2,7 +2,8 @@
 
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { RetryManager } from './retryManager';
-import { RetryConfig } from './types';
+import { RetryConfig, ReplayOptions, ReplayAllOptions, ReplayResult } from './types';
+import { isIdempotentMethod } from './utils';
 
 function loadAxios(): AxiosInstance {
   try {
@@ -69,6 +70,73 @@ export class AxiosRetry {
 
   getRetryManager(): RetryManager {
     return this.retryManager;
+  }
+
+  async replay<T = any>(id: string, options: ReplayOptions = {}): Promise<AxiosResponse<T>> {
+    const failed = await this.retryManager.getFailedRequest(id);
+
+    if (!failed) {
+      throw new Error(`No failed request found with id "${id}"`);
+    }
+
+    if (!options.force && !isIdempotentMethod(failed.method)) {
+      throw new Error(
+        `Refusing to replay a ${failed.method} request without force: true — it may have ` +
+          'already been processed by the server. Pass { force: true } if you are sure it is safe to retry.'
+      );
+    }
+
+    const response = await this.request<T>({
+      url: failed.url,
+      method: failed.method as AxiosRequestConfig['method'],
+      headers: options.headers ?? failed.headers,
+      data: options.body ?? failed.body,
+    });
+
+    if (options.removeOnSuccess ?? true) {
+      await this.retryManager.removeFailedRequest(id);
+    }
+
+    return response;
+  }
+
+  async replayAll(options: ReplayAllOptions = {}): Promise<ReplayResult[]> {
+    const failed = await this.retryManager.getFailedRequests();
+    const matching = failed.filter(
+      (request) =>
+        (!options.method || request.method === options.method.toUpperCase()) &&
+        (options.statusCode === undefined || request.statusCode === options.statusCode)
+    );
+
+    const results: ReplayResult[] = [];
+
+    for (const request of matching) {
+      if (options.dryRun) {
+        results.push({
+          id: request.id,
+          url: request.url,
+          method: request.method,
+          success: false,
+          skipped: true,
+        });
+        continue;
+      }
+
+      try {
+        await this.replay(request.id, options);
+        results.push({ id: request.id, url: request.url, method: request.method, success: true });
+      } catch (error) {
+        results.push({
+          id: request.id,
+          url: request.url,
+          method: request.method,
+          success: false,
+          error,
+        });
+      }
+    }
+
+    return results;
   }
 }
 
@@ -194,6 +262,72 @@ export class FetchRetry {
 
   getRetryManager(): RetryManager {
     return this.retryManager;
+  }
+
+  async replay(id: string, options: ReplayOptions = {}): Promise<Response> {
+    const failed = await this.retryManager.getFailedRequest(id);
+
+    if (!failed) {
+      throw new Error(`No failed request found with id "${id}"`);
+    }
+
+    if (!options.force && !isIdempotentMethod(failed.method)) {
+      throw new Error(
+        `Refusing to replay a ${failed.method} request without force: true — it may have ` +
+          'already been processed by the server. Pass { force: true } if you are sure it is safe to retry.'
+      );
+    }
+
+    const response = await this.fetch(failed.url, {
+      method: failed.method,
+      headers: options.headers ?? failed.headers,
+      body: options.body ?? failed.body,
+    });
+
+    if (options.removeOnSuccess ?? true) {
+      await this.retryManager.removeFailedRequest(id);
+    }
+
+    return response;
+  }
+
+  async replayAll(options: ReplayAllOptions = {}): Promise<ReplayResult[]> {
+    const failed = await this.retryManager.getFailedRequests();
+    const matching = failed.filter(
+      (request) =>
+        (!options.method || request.method === options.method.toUpperCase()) &&
+        (options.statusCode === undefined || request.statusCode === options.statusCode)
+    );
+
+    const results: ReplayResult[] = [];
+
+    for (const request of matching) {
+      if (options.dryRun) {
+        results.push({
+          id: request.id,
+          url: request.url,
+          method: request.method,
+          success: false,
+          skipped: true,
+        });
+        continue;
+      }
+
+      try {
+        await this.replay(request.id, options);
+        results.push({ id: request.id, url: request.url, method: request.method, success: true });
+      } catch (error) {
+        results.push({
+          id: request.id,
+          url: request.url,
+          method: request.method,
+          success: false,
+          error,
+        });
+      }
+    }
+
+    return results;
   }
 }
 
