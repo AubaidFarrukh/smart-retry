@@ -272,3 +272,214 @@ describe('AxiosRetry', () => {
     expect(failure.statusCode).toBe(500);
   });
 });
+
+describe('AxiosRetry.replay', () => {
+  let axiosRetry: AxiosRetry;
+
+  beforeEach(() => {
+    if (fs.existsSync(AXIOS_TEST_LOG_PATH)) {
+      fs.unlinkSync(AXIOS_TEST_LOG_PATH);
+    }
+    mockedAxios.request = jest.fn();
+    axiosRetry = new AxiosRetry({ maxRetries: 1 }, AXIOS_TEST_LOG_PATH);
+  });
+
+  afterEach(() => {
+    if (fs.existsSync(AXIOS_TEST_LOG_PATH)) {
+      fs.unlinkSync(AXIOS_TEST_LOG_PATH);
+    }
+  });
+
+  async function logAFailedRequest(method: string, url = '/orders') {
+    const error: any = new Error('Server error');
+    error.response = { status: 500 };
+    error.config = { url, method: method.toLowerCase(), headers: { 'x-test': '1' }, data: '{}' };
+    mockedAxios.request.mockRejectedValueOnce(error);
+
+    await expect(axiosRetry.request({ url, method: method as any })).rejects.toThrow();
+
+    const logged = await axiosRetry.getRetryManager().getFailedRequests();
+    return logged.find((r) => r.url === url)!;
+  }
+
+  it('throws when no failed request matches the given id', async () => {
+    await expect(axiosRetry.replay('does-not-exist')).rejects.toThrow(
+      'No failed request found with id "does-not-exist"'
+    );
+  });
+
+  it('replays an idempotent (GET) request using the logged url/headers/body', async () => {
+    const failure = await logAFailedRequest('GET');
+    mockedAxios.request.mockResolvedValueOnce({ data: { ok: true }, status: 200 });
+
+    const response = await axiosRetry.replay(failure.id);
+
+    expect(response.data).toEqual({ ok: true });
+    expect(mockedAxios.request).toHaveBeenLastCalledWith({
+      url: '/orders',
+      method: 'GET',
+      headers: { 'x-test': '1' },
+      data: '{}',
+    });
+  });
+
+  it('refuses to replay a non-idempotent (POST) request without force', async () => {
+    const failure = await logAFailedRequest('POST');
+
+    await expect(axiosRetry.replay(failure.id)).rejects.toThrow(/force: true/);
+  });
+
+  it('replays a non-idempotent request when force is true', async () => {
+    const failure = await logAFailedRequest('POST');
+    mockedAxios.request.mockResolvedValueOnce({ data: { ok: true }, status: 200 });
+
+    const response = await axiosRetry.replay(failure.id, { force: true });
+
+    expect(response.data).toEqual({ ok: true });
+  });
+
+  it('removes the entry from the failure log on a successful replay by default', async () => {
+    const failure = await logAFailedRequest('GET');
+    mockedAxios.request.mockResolvedValueOnce({ data: {}, status: 200 });
+
+    await axiosRetry.replay(failure.id);
+
+    expect(await axiosRetry.getRetryManager().getFailedRequest(failure.id)).toBeUndefined();
+  });
+
+  it('keeps the log entry when removeOnSuccess is false', async () => {
+    const failure = await logAFailedRequest('GET');
+    mockedAxios.request.mockResolvedValueOnce({ data: {}, status: 200 });
+
+    await axiosRetry.replay(failure.id, { removeOnSuccess: false });
+
+    expect(await axiosRetry.getRetryManager().getFailedRequest(failure.id)).toBeDefined();
+  });
+
+  it('keeps the log entry when the replay itself fails', async () => {
+    const failure = await logAFailedRequest('GET');
+    mockedAxios.request.mockRejectedValue(new Error('still down'));
+
+    await expect(axiosRetry.replay(failure.id)).rejects.toThrow();
+
+    expect(await axiosRetry.getRetryManager().getFailedRequest(failure.id)).toBeDefined();
+  });
+
+  it('replayAll replays every logged failure and reports per-item results', async () => {
+    const a = await logAFailedRequest('GET', '/a');
+    const b = await logAFailedRequest('GET', '/b');
+    mockedAxios.request.mockResolvedValue({ data: {}, status: 200 });
+
+    const results = await axiosRetry.replayAll();
+
+    expect(results).toHaveLength(2);
+    expect(results.every((r) => r.success)).toBe(true);
+    expect(results.map((r) => r.id).sort()).toEqual([a.id, b.id].sort());
+  });
+
+  it('replayAll filters by method and statusCode', async () => {
+    await logAFailedRequest('GET', '/a');
+    await logAFailedRequest('POST', '/b');
+    mockedAxios.request.mockResolvedValue({ data: {}, status: 200 });
+
+    const results = await axiosRetry.replayAll({ method: 'POST', force: true });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].url).toBe('/b');
+  });
+
+  it('replayAll in dryRun mode reports matches without making requests', async () => {
+    await logAFailedRequest('GET');
+    const callsBeforeDryRun = mockedAxios.request.mock.calls.length;
+
+    const results = await axiosRetry.replayAll({ dryRun: true });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].skipped).toBe(true);
+    expect(mockedAxios.request.mock.calls.length).toBe(callsBeforeDryRun);
+  });
+});
+
+describe('FetchRetry.replay', () => {
+  let fetchRetry: FetchRetry;
+  let fetchMock: jest.Mock;
+  const originalFetch = global.fetch;
+  const LOG_PATH = path.join(__dirname, 'fetch-replay-test.json');
+
+  beforeEach(() => {
+    if (fs.existsSync(LOG_PATH)) {
+      fs.unlinkSync(LOG_PATH);
+    }
+    fetchRetry = new FetchRetry({ maxRetries: 1 }, LOG_PATH);
+    fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    if (fs.existsSync(LOG_PATH)) {
+      fs.unlinkSync(LOG_PATH);
+    }
+  });
+
+  async function logAFailedRequest(method: string, url = '/orders') {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 500 }));
+
+    await expect(fetchRetry.fetch(url, { method })).rejects.toThrow();
+
+    const logged = await fetchRetry.getRetryManager().getFailedRequests();
+    return logged.find((r) => r.url === url)!;
+  }
+
+  it('throws when no failed request matches the given id', async () => {
+    await expect(fetchRetry.replay('does-not-exist')).rejects.toThrow(
+      'No failed request found with id "does-not-exist"'
+    );
+  });
+
+  it('replays an idempotent (GET) request', async () => {
+    const failure = await logAFailedRequest('GET');
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const response = await fetchRetry.replay(failure.id);
+
+    expect(response.status).toBe(200);
+    const [, init] = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+    expect(init.method).toBe('GET');
+  });
+
+  it('refuses to replay a non-idempotent (POST) request without force', async () => {
+    const failure = await logAFailedRequest('POST');
+
+    await expect(fetchRetry.replay(failure.id)).rejects.toThrow(/force: true/);
+  });
+
+  it('replays a non-idempotent request when force is true', async () => {
+    const failure = await logAFailedRequest('POST');
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const response = await fetchRetry.replay(failure.id, { force: true });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('removes the entry from the failure log on a successful replay by default', async () => {
+    const failure = await logAFailedRequest('GET');
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await fetchRetry.replay(failure.id);
+
+    expect(await fetchRetry.getRetryManager().getFailedRequest(failure.id)).toBeUndefined();
+  });
+
+  it('replayAll replays every logged failure matching the filters', async () => {
+    await logAFailedRequest('GET', '/a');
+    await logAFailedRequest('GET', '/b');
+    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+    const results = await fetchRetry.replayAll();
+
+    expect(results).toHaveLength(2);
+    expect(results.every((r) => r.success)).toBe(true);
+  });
+});

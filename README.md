@@ -17,6 +17,7 @@
 - [Quick Start](#quick-start)
 - [API Reference](#api-reference)
 - [Advanced Usage](#advanced-usage)
+- [CLI](#cli)
 - [How It Works](#how-it-works)
 - [Backoff Strategies](#backoff-strategies)
 - [FAQ](#faq)
@@ -42,7 +43,7 @@ Use it when you're calling flaky third-party APIs, internal services behind a lo
 - **TypeScript support** with full type definitions
 - **Hooks and callbacks** for monitoring retry attempts
 - **Circuit breaker** to fail fast against a service that's fully down instead of retrying into it
-- **Replay CLI** (coming soon) to retry failed requests
+- **Replay failed requests** programmatically or via the `smart-retry replay` CLI
 
 ## Installation
 
@@ -216,6 +217,36 @@ await manager.clearFailedRequests();
 const removed = await manager.removeFailedRequest('request-id');
 ```
 
+### Replay Failed Requests
+
+Failures are logged with everything needed to retry them later — so you don't have to just know something failed, you can actually re-fire it:
+
+```typescript
+const client = createAxiosRetry();
+
+// Replay one logged failure by id, using the stored url/headers/body
+const response = await client.replay('failed-request-id');
+
+// Replay every logged failure at once
+const results = await client.replayAll();
+// [{ id, url, method, success: true }, { id, url, method, success: false, error }, ...]
+```
+
+Non-idempotent requests (POST, PATCH) are refused by default — the original request may have already been processed by the server before it was logged as failed, so blindly replaying it risks duplicating a side effect (a double charge, a duplicate order). Pass `force: true` once you've confirmed it's safe:
+
+```typescript
+await client.replay('failed-request-id', { force: true });
+
+// replayAll supports the same options, plus filtering and a dry run:
+await client.replayAll({
+  method: 'GET',
+  statusCode: 503,
+  dryRun: true, // report what would be replayed without making any requests
+});
+```
+
+A successfully replayed request is removed from the failure log by default (`removeOnSuccess: true`); a failed replay stays logged so it isn't lost.
+
 ### Circuit Breaker
 
 Retrying with backoff is meant for transient blips — but if a service is fully down, retrying just keeps hammering it. Enabling a circuit breaker tracks consecutive failures and, once a threshold is hit, fails fast (no attempts made at all) for a cooldown period instead of retrying, then lets a single trial request through to check if the service has recovered:
@@ -243,6 +274,30 @@ client.getRetryManager().getCircuitState(); // 'closed' | 'open' | 'half-open'
 ```
 
 The circuit is scoped to the `RetryManager` instance (i.e. per client), not per URL — if a single client calls several different endpoints, failures across all of them count toward the same breaker. Create separate clients per endpoint if you need independent breakers.
+
+## CLI
+
+Installing smart-retry also installs a `smart-retry` CLI for inspecting and replaying a failure log from the command line — handy for replaying failures after a deploy or an incident, without writing a script:
+
+```bash
+# List logged failures
+npx smart-retry replay list
+npx smart-retry replay list --method POST --status 503
+npx smart-retry replay list --json
+
+# Replay one, by id
+npx smart-retry replay <id>
+npx smart-retry replay <id> --dry-run   # preview without making the request
+npx smart-retry replay <id> --force     # required for a logged POST/PATCH
+
+# Replay everything (optionally filtered)
+npx smart-retry replay --all
+npx smart-retry replay --all --method GET --status 503
+```
+
+By default it reads `smart-retry-log.json` in the current directory; pass `--log <path>` to point at a different file. The replay itself goes through the same retry/backoff machinery as the rest of the library — `--max-retries`, `--delay`, `--backoff`, and `--idempotent` configure that policy for the replay, same meaning as the matching `RetryConfig` options. Run `smart-retry replay --help` for the full list.
+
+The CLI replays over `fetch`, so it requires Node 18 or later regardless of which client (`AxiosRetry` or `FetchRetry`) originally logged the failure — the retry/backoff/circuit-breaker library code itself still supports Node 14+.
 
 ## How It Works
 
@@ -298,7 +353,7 @@ By design. If a POST or PATCH fails after the server may have already processed 
 To `smart-retry-log.json` in the current working directory by default, or to a custom path passed as the second argument to `createAxiosRetry`/`createFetchRetry`/`createRetryManager`.
 
 **Is there a CLI to replay failed requests?**
-Not yet — failed requests are logged with enough detail (URL, method, headers, body) to replay manually via `getFailedRequests()`. A replay CLI is planned.
+Yes — see the [CLI](#cli) section above (`npx smart-retry replay`), or use `replay()`/`replayAll()` programmatically (see [Replay Failed Requests](#replay-failed-requests)).
 
 ## Contributing
 
