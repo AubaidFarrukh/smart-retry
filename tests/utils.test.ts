@@ -42,6 +42,25 @@ describe('Utils', () => {
       expect(calculateDelay(1000, 3, 'none')).toBe(1000);
     });
 
+    describe.each([
+      ['exponential', 3, 4000],
+      ['linear', 3, 3000],
+      ['none', 3, 1000],
+    ] as const)('%s jitter strategies', (backoff, attempt, base) => {
+      it.each([0, 0.5, 1])('uses the requested range with random %s', (random) => {
+        const spy = jest.spyOn(Math, 'random').mockReturnValue(random);
+        try {
+          expect(calculateDelay(1000, attempt, backoff, 'full')).toBe(base * random);
+          expect(calculateDelay(1000, attempt, backoff, 'equal')).toBe(base * (0.5 + random * 0.5));
+          expect(calculateDelay(1000, attempt, backoff, true)).toBe(base * (0.5 + random * 0.5));
+          expect(calculateDelay(1000, attempt, backoff, false)).toBe(base);
+          expect(calculateDelay(1000, attempt, backoff)).toBe(base);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    });
+
     it('should apply jitter within 50% to 100% of calculated delay when jitter is true', () => {
       for (let i = 0; i < 50; i++) {
         const delay = calculateDelay(1000, 1, 'exponential', true);
