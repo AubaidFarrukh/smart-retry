@@ -1,6 +1,7 @@
 /** @format */
 
 import { randomUUID } from 'crypto';
+import type { RetryConfig } from './types';
 
 export function generateId(): string {
   return randomUUID();
@@ -10,7 +11,7 @@ export function calculateDelay(
   baseDelay: number,
   attempt: number,
   backoff: 'exponential' | 'linear' | 'none',
-  jitter?: boolean
+  jitter?: RetryConfig['jitter']
 ): number {
   let delay: number;
   switch (backoff) {
@@ -29,7 +30,7 @@ export function calculateDelay(
   }
 
   if (jitter) {
-    delay = delay * (0.5 + Math.random() * 0.5);
+    delay = delay * (jitter === 'full' ? Math.random() : 0.5 + Math.random() * 0.5);
   }
 
   return delay;
