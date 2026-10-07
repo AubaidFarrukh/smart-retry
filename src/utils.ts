@@ -35,6 +35,28 @@ export function calculateDelay(
   return delay;
 }
 
+export function parseRetryAfter(retryAfter: string | null): number | undefined {
+  if (!retryAfter) {
+    return undefined;
+  }
+
+  if (/^\d+$/.test(retryAfter)) {
+    return Number(retryAfter) * 1000;
+  }
+
+  if (/^[+-]?\d*\.?\d+$/.test(retryAfter)) {
+    return undefined;
+  }
+
+  const date = Date.parse(retryAfter);
+
+  if (!Number.isNaN(date)) {
+    return Math.max(0, date - Date.now());
+  }
+
+  return undefined;
+}
+
 const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']);
 
 export function isIdempotentMethod(method?: string): boolean {

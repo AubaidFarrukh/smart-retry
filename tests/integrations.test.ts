@@ -174,6 +174,107 @@ describe('FetchRetry failure logging', () => {
   });
 });
 
+describe('FetchRetry Retry-After', () => {
+  let fetchMock: jest.Mock;
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+
+    if (fs.existsSync(TEST_LOG_PATH)) {
+      fs.unlinkSync(TEST_LOG_PATH);
+    }
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    global.fetch = originalFetch;
+
+    if (fs.existsSync(TEST_LOG_PATH)) {
+      fs.unlinkSync(TEST_LOG_PATH);
+    }
+  });
+
+  it('respects Retry-After header on a 429 response', async () => {
+    fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 429,
+          headers: { 'Retry-After': '2' },
+        })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry(
+      {
+        maxRetries: 2,
+        delay: 100,
+        backoff: 'none',
+      },
+      TEST_LOG_PATH
+    );
+
+    const request = fetchRetry.get('/rate-limited');
+
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(1999);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(1);
+
+    const response = await request;
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back to the configured delay when Retry-After is invalid', async () => {
+    fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 429,
+          headers: { 'Retry-After': 'invalid' },
+        })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry(
+      {
+        maxRetries: 2,
+        delay: 100,
+        backoff: 'none',
+      },
+      TEST_LOG_PATH
+    );
+
+    const request = fetchRetry.get('/rate-limited');
+
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(99);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(1);
+
+    const response = await request;
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('AxiosRetry', () => {
   let axiosRetry: AxiosRetry;
 
