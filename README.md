@@ -154,7 +154,7 @@ interface RetryConfig {
   shouldRetry?: (error: any) => boolean;
   onRetry?: (attempt: number, error: any) => void;
   idempotent?: boolean; // Default: false — see "Which errors get retried by default?" below
-  jitter?: boolean; // Default: false — adds randomization (50-100% of delay) to avoid thundering-herd retries
+  jitter?: boolean | 'full' | 'equal'; // Default: false; true/'equal': 50-100%, 'full': 0-100%
   circuitBreaker?: CircuitBreakerConfig; // Off by default — see "Circuit Breaker" below
 }
 
@@ -309,7 +309,10 @@ The CLI replays over `fetch`, so it requires Node 18 or later regardless of whic
 
 ## Backoff Strategies
 
-The delays below are the base values before jitter is applied. With `jitter: true`, each delay is randomized to 50–100% of the corresponding backoff delay.
+The delays below are the base values before jitter is applied. With `jitter: true`
+or `jitter: 'equal'`, each delay is randomized to 50–100% of the corresponding
+backoff delay. Use `jitter: 'full'` to randomize from 0–100%, spreading retries
+over the full interval. Omit `jitter` or pass `false` for deterministic delays.
 
 **Exponential (default):**
 

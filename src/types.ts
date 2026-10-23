@@ -17,10 +17,11 @@ export interface RetryConfig {
   idempotent?: boolean;
   /**
    * Adds randomization to retry delay to prevent thundering-herd issues.
-   * When enabled, delays are randomized between 50% and 100% of the computed backoff delay.
+   * `true` or `equal` randomizes between 50% and 100% of the computed delay.
+   * `full` randomizes between 0% and 100%.
    * Default: false
    */
-  jitter?: boolean;
+  jitter?: boolean | 'full' | 'equal';
   /**
    * Trips the circuit open after too many consecutive failures, so calls
    * fail fast instead of retrying against a service that's fully down.
