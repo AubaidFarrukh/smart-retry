@@ -222,6 +222,7 @@ export class FetchRetry {
           error.response = {
             status: response.status,
             statusText: response.statusText,
+            headers: response.headers,
           };
           throw error;
         }

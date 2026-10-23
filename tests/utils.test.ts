@@ -5,6 +5,7 @@ import {
   sleep,
   getErrorMessage,
   getStatusCode,
+  parseRetryAfter,
 } from '../src/utils';
 
 describe('Utils', () => {
@@ -70,6 +71,44 @@ describe('Utils', () => {
       } finally {
         Math.random = originalRandom;
       }
+    });
+  });
+
+  describe('parseRetryAfter', () => {
+    it('parses delay in seconds to milliseconds', () => {
+      expect(parseRetryAfter('2')).toBe(2000);
+    });
+
+    it('parses an HTTP date into a delay', () => {
+      const now = Date.now();
+      const retryDate = new Date(now + 5000).toUTCString();
+
+      const delay = parseRetryAfter(retryDate);
+
+      expect(delay).toBeGreaterThanOrEqual(4000);
+      expect(delay).toBeLessThanOrEqual(5000);
+    });
+
+    it('returns undefined for an invalid Retry-After value', () => {
+      expect(parseRetryAfter('invalid')).toBeUndefined();
+    });
+
+    it('returns undefined for a non-integer delay in seconds', () => {
+      expect(parseRetryAfter('1.5')).toBeUndefined();
+    });
+
+    it('returns undefined for a negative delay in seconds', () => {
+      expect(parseRetryAfter('-2')).toBeUndefined();
+    });
+
+    it('returns undefined when Retry-After is missing', () => {
+      expect(parseRetryAfter(null)).toBeUndefined();
+    });
+
+    it('returns zero for an HTTP date in the past', () => {
+      const retryDate = new Date(Date.now() - 5000).toUTCString();
+
+      expect(parseRetryAfter(retryDate)).toBe(0);
     });
   });
 

@@ -15,6 +15,7 @@ import {
   sleep,
   getErrorMessage,
   getStatusCode,
+  parseRetryAfter,
 } from './utils';
 
 export class RetryManager {
@@ -83,12 +84,12 @@ export class RetryManager {
         }
 
         if (attempts < this.config.maxRetries) {
-          const delay = calculateDelay(
-            this.config.delay,
-            attempts,
-            this.config.backoff,
-            this.config.jitter
-          );
+          const retryAfter = (error as any).response?.headers?.get?.('retry-after');
+          const retryAfterDelay = parseRetryAfter(retryAfter);
+
+          const delay =
+            retryAfterDelay ??
+            calculateDelay(this.config.delay, attempts, this.config.backoff, this.config.jitter);
           this.config.onRetry(attempts, error);
           await sleep(delay);
         }
