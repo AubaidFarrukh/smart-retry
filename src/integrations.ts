@@ -18,15 +18,20 @@ function loadAxios(): AxiosInstance {
 export class AxiosRetry {
   private retryManager: RetryManager;
   private axios: AxiosInstance;
+  private signal?: AbortSignal;
 
   constructor(config?: RetryConfig, storePath?: string) {
     this.retryManager = new RetryManager(config, storePath);
     this.axios = loadAxios();
+    this.signal = config?.signal;
   }
 
   async request<T = any>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+    const effectiveSignal = config.signal ?? this.signal;
+    const requestConfig = effectiveSignal ? { ...config, signal: effectiveSignal } : config;
+
     const result = await this.retryManager.execute<AxiosResponse<T>>(() =>
-      this.axios.request(config)
+      this.axios.request(requestConfig)
     );
 
     if (!result.success) {
@@ -200,12 +205,17 @@ function normalizeHeaders(headers?: HeadersInit): Record<string, string> | undef
 
 export class FetchRetry {
   private retryManager: RetryManager;
+  private signal?: AbortSignal;
 
   constructor(config?: RetryConfig, storePath?: string) {
     this.retryManager = new RetryManager(config, storePath);
+    this.signal = config?.signal;
   }
 
   async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const effectiveSignal = init?.signal ?? this.signal;
+    const effectiveInit = effectiveSignal ? { ...init, signal: effectiveSignal } : init;
+
     const requestConfig = {
       url: getRequestUrl(input),
       method: (init?.method || 'GET').toUpperCase(),
@@ -215,7 +225,7 @@ export class FetchRetry {
 
     const result = await this.retryManager.execute<Response>(async () => {
       try {
-        const response = await fetch(input, init);
+        const response = await fetch(input, effectiveInit);
 
         if (!response.ok) {
           const error: any = new Error(`HTTP ${response.status}: ${response.statusText}`);

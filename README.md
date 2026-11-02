@@ -156,6 +156,7 @@ interface RetryConfig {
   idempotent?: boolean; // Default: false — see "Which errors get retried by default?" below
   jitter?: boolean; // Default: false — adds randomization (50-100% of delay) to avoid thundering-herd retries
   circuitBreaker?: CircuitBreakerConfig; // Off by default — see "Circuit Breaker" below
+  signal?: AbortSignal; // Optional AbortSignal to cancel an in-flight retry loop — see "Cancelling a retry loop" below
 }
 
 interface CircuitBreakerConfig {
@@ -274,6 +275,36 @@ client.getRetryManager().getCircuitState(); // 'closed' | 'open' | 'half-open'
 ```
 
 The circuit is scoped to the `RetryManager` instance (i.e. per client), not per URL — if a single client calls several different endpoints, failures across all of them count toward the same breaker. Create separate clients per endpoint if you need independent breakers.
+
+### Cancelling a retry loop (AbortSignal)
+
+Pass a standard `AbortSignal` via the `signal` option to cancel an in-flight retry loop early:
+
+```typescript
+const controller = new AbortController();
+const client = createFetchRetry({
+  maxRetries: 5,
+  delay: 2000,
+  signal: controller.signal,
+});
+
+// Cancel the retry loop after 1.5 seconds
+setTimeout(() => controller.abort(), 1500);
+
+try {
+  await client.get('https://flaky-api.com/data');
+} catch (error: any) {
+  if (error.name === 'AbortError') {
+    // Retry loop was cancelled
+  }
+}
+```
+
+Abort checks happen before the first attempt, before each attempt, and during backoff. An aborted run returns a failure result with an `AbortError`-named error, is NOT written to the failure log, and does NOT count toward the circuit breaker.
+
+The signal is passed through to fetch/axios with per-request signal taking precedence over the config signal.
+
+`AbortController` is a global starting with Node 15. The package engines field still says `>=14`, so if you run on Node 14 you will need a polyfill (such as `abort-controller`) or a global shim.
 
 ## CLI
 

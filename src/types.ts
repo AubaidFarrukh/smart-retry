@@ -27,6 +27,11 @@ export interface RetryConfig {
    * Off by default; pass an object (even `{}`) to enable with defaults.
    */
   circuitBreaker?: CircuitBreakerConfig;
+  /**
+   * An optional AbortSignal to cancel an in-flight retry loop. When aborted,
+   * retries stop immediately without logging a failure or tripping the circuit breaker.
+   */
+  signal?: AbortSignal;
 }
 
 export interface FailedRequest {

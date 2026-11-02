@@ -19,7 +19,10 @@ import {
 } from './utils';
 
 export class RetryManager {
-  private config: Required<RetryConfig>;
+  // Every RetryConfig field except `signal` has a default, so the resolved
+  // config is Required except for the genuinely optional signal.
+  private config: Omit<Required<RetryConfig>, 'signal'>;
+  private signal?: AbortSignal;
   private store: FileStore;
   private circuitBreaker?: CircuitBreaker;
 
@@ -35,6 +38,7 @@ export class RetryManager {
       circuitBreaker: config.circuitBreaker ?? {},
     };
 
+    this.signal = config.signal;
     this.store = new FileStore(storePath, storeConfig);
 
     if (config.circuitBreaker) {
@@ -43,6 +47,17 @@ export class RetryManager {
   }
 
   async execute<T>(fn: RetryableFunction<T>): Promise<RetryResult<T>> {
+    const startTime = Date.now();
+
+    if (this.signal?.aborted) {
+      return {
+        success: false,
+        error: this.createAbortError(),
+        attempts: 0,
+        totalDuration: 0,
+      };
+    }
+
     if (this.circuitBreaker && !this.circuitBreaker.canAttempt()) {
       const error = new Error(
         'Circuit breaker is open — too many consecutive failures, failing fast'
@@ -57,11 +72,19 @@ export class RetryManager {
       };
     }
 
-    const startTime = Date.now();
     let lastError: any;
     let attempts = 0;
 
     while (attempts < this.config.maxRetries) {
+      if (this.signal?.aborted) {
+        return {
+          success: false,
+          error: this.createAbortError(),
+          attempts,
+          totalDuration: Date.now() - startTime,
+        };
+      }
+
       attempts++;
 
       try {
@@ -79,6 +102,17 @@ export class RetryManager {
       } catch (error) {
         lastError = error;
 
+        if (this.signal?.aborted) {
+          const abortError =
+            (error as any)?.name === 'AbortError' ? error : this.createAbortError();
+          return {
+            success: false,
+            error: abortError,
+            attempts,
+            totalDuration: Date.now() - startTime,
+          };
+        }
+
         if (!this.config.shouldRetry(error)) {
           break;
         }
@@ -91,7 +125,17 @@ export class RetryManager {
             retryAfterDelay ??
             calculateDelay(this.config.delay, attempts, this.config.backoff, this.config.jitter);
           this.config.onRetry(attempts, error);
-          await sleep(delay);
+          await this.abortableSleep(delay);
+
+          if (this.signal?.aborted) {
+            return {
+              success: false,
+              error:
+                (lastError as any)?.name === 'AbortError' ? lastError : this.createAbortError(),
+              attempts,
+              totalDuration: Date.now() - startTime,
+            };
+          }
         }
       }
     }
@@ -107,6 +151,44 @@ export class RetryManager {
       attempts,
       totalDuration,
     };
+  }
+
+  private createAbortError(): Error {
+    const error = new Error('Retry aborted');
+    error.name = 'AbortError';
+    return error;
+  }
+
+  private async abortableSleep(ms: number): Promise<void> {
+    const signal = this.signal;
+    if (!signal) {
+      return sleep(ms);
+    }
+    if (signal.aborted) {
+      return;
+    }
+
+    let timer: NodeJS.Timeout | undefined;
+    let onAbort: (() => void) | undefined;
+
+    try {
+      await new Promise<void>((resolve) => {
+        if (signal.aborted) {
+          resolve();
+          return;
+        }
+        onAbort = () => resolve();
+        signal.addEventListener('abort', onAbort);
+        timer = setTimeout(resolve, ms);
+      });
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+      if (onAbort) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    }
   }
 
   getCircuitState(): CircuitState | undefined {

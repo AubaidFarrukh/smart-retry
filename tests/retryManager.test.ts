@@ -284,4 +284,253 @@ describe('RetryManager', () => {
       expect(breakerManager.getCircuitState()).toBe('closed');
     });
   });
+
+  describe('signal config (AbortSignal)', () => {
+    function retryableError(): any {
+      const error: any = new Error('Server error');
+      error.response = { status: 503 };
+      return error;
+    }
+
+    it('returns an abort result with 0 attempts and no log entry when already aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const abortManager = new RetryManager(
+        { maxRetries: 3, delay: 50, signal: controller.signal },
+        TEST_LOG_PATH
+      );
+
+      const result = await abortManager.execute(fnNeverCalled);
+
+      async function fnNeverCalled(): Promise<string> {
+        callCount++;
+        return 'should not run';
+      }
+
+      expect(result.success).toBe(false);
+      expect(result.attempts).toBe(0);
+      expect(callCount).toBe(0);
+      expect(result.error.name).toBe('AbortError');
+      expect(result.error.message).toBe('Retry aborted');
+      expect(await abortManager.getFailedRequestCount()).toBe(0);
+    });
+
+    it('checks abort before the circuit-breaker fail-fast check', async () => {
+      const controller = new AbortController();
+      const breakerManager = new RetryManager(
+        {
+          maxRetries: 1,
+          delay: 0,
+          signal: controller.signal,
+          circuitBreaker: { failureThreshold: 1 },
+        },
+        TEST_LOG_PATH
+      );
+
+      await breakerManager.execute(async () => {
+        throw new Error('Down');
+      });
+      expect(breakerManager.getCircuitState()).toBe('open');
+
+      controller.abort();
+      const result = await breakerManager.execute(async () => {
+        callCount++;
+        return 'should not run';
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.attempts).toBe(0);
+      expect(callCount).toBe(0);
+      expect(result.error.name).toBe('AbortError');
+      expect((result.error as any).circuitOpen).toBeUndefined();
+    });
+
+    it('stops promptly when aborted during backoff, without logging or tripping the breaker', async () => {
+      const controller = new AbortController();
+      const onRetryCalls: number[] = [];
+      const abortManager = new RetryManager(
+        {
+          maxRetries: 3,
+          delay: 2000,
+          signal: controller.signal,
+          onRetry: (attempt) => onRetryCalls.push(attempt),
+          circuitBreaker: { failureThreshold: 1 },
+        },
+        TEST_LOG_PATH
+      );
+
+      const fn = async () => {
+        callCount++;
+        throw retryableError();
+      };
+
+      setTimeout(() => controller.abort(), 100);
+      const startedAt = Date.now();
+      const result = await abortManager.execute(fn);
+      const elapsed = Date.now() - startedAt;
+
+      expect(result.success).toBe(false);
+      expect(result.attempts).toBe(1);
+      expect(callCount).toBe(1);
+      expect(result.error.name).toBe('AbortError');
+      expect(elapsed).toBeLessThan(1000);
+      expect(onRetryCalls).toEqual([1]);
+      expect(await abortManager.getFailedRequestCount()).toBe(0);
+      expect(abortManager.getCircuitState()).toBe('closed');
+    });
+
+    it('returns the abort result with no log entry when aborted during an in-flight attempt', async () => {
+      const controller = new AbortController();
+      const abortManager = new RetryManager(
+        { maxRetries: 3, delay: 50, signal: controller.signal },
+        TEST_LOG_PATH
+      );
+
+      const result = await abortManager.execute(async () => {
+        callCount++;
+        controller.abort();
+        throw new Error('boom');
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.attempts).toBe(1);
+      expect(callCount).toBe(1);
+      expect(result.error.name).toBe('AbortError');
+      expect(result.error.message).toBe('Retry aborted');
+      expect(await abortManager.getFailedRequestCount()).toBe(0);
+    });
+
+    it('preserves the underlying AbortError when fn rejects with one while aborted', async () => {
+      const controller = new AbortController();
+      const abortManager = new RetryManager(
+        { maxRetries: 3, delay: 50, signal: controller.signal },
+        TEST_LOG_PATH
+      );
+      const abortError = new DOMException('The operation was aborted', 'AbortError');
+
+      const result = await abortManager.execute(async () => {
+        controller.abort();
+        throw abortError;
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(abortError);
+      expect(await abortManager.getFailedRequestCount()).toBe(0);
+    });
+
+    it('preserves the underlying AbortError when abort lands during backoff', async () => {
+      const controller = new AbortController();
+      const abortManager = new RetryManager(
+        {
+          maxRetries: 3,
+          delay: 2000,
+          signal: controller.signal,
+          shouldRetry: () => true,
+        },
+        TEST_LOG_PATH
+      );
+      const abortError = new DOMException('The operation was aborted', 'AbortError');
+
+      setTimeout(() => controller.abort(), 50);
+      const result = await abortManager.execute(async () => {
+        callCount++;
+        throw abortError;
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(abortError);
+      expect(result.attempts).toBe(1);
+      expect(callCount).toBe(1);
+      expect(await abortManager.getFailedRequestCount()).toBe(0);
+    });
+
+    it('treats an AbortError-named error as a normal error when the signal is not aborted', async () => {
+      const controller = new AbortController();
+      const abortManager = new RetryManager(
+        {
+          maxRetries: 3,
+          delay: 10,
+          signal: controller.signal,
+          shouldRetry: () => true,
+        },
+        TEST_LOG_PATH
+      );
+
+      const result = await abortManager.execute(async () => {
+        callCount++;
+        if (callCount < 2) {
+          const error = new DOMException('aborted by transport', 'AbortError');
+          throw error;
+        }
+        return 'recovered';
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBe('recovered');
+      expect(result.attempts).toBe(2);
+      expect(callCount).toBe(2);
+    });
+
+    it('retries normally when the signal is present but never aborted', async () => {
+      const controller = new AbortController();
+      const abortManager = new RetryManager(
+        { maxRetries: 3, delay: 10, signal: controller.signal },
+        TEST_LOG_PATH
+      );
+
+      const result = await abortManager.execute(async () => {
+        callCount++;
+        if (callCount < 2) {
+          throw retryableError();
+        }
+        return 'success';
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.attempts).toBe(2);
+      expect(callCount).toBe(2);
+    });
+
+    it('does not leak abort listeners and a fresh signal works on a new manager', async () => {
+      const controller = new AbortController();
+      const addSpy = jest.spyOn(controller.signal, 'addEventListener');
+      const removeSpy = jest.spyOn(controller.signal, 'removeEventListener');
+      const abortManager = new RetryManager(
+        { maxRetries: 3, delay: 2000, signal: controller.signal },
+        TEST_LOG_PATH
+      );
+
+      setTimeout(() => controller.abort(), 50);
+      const result = await abortManager.execute(async () => {
+        throw retryableError();
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error.name).toBe('AbortError');
+      const addedListeners = addSpy.mock.calls.map((call) => call[1]);
+      const removedListeners = removeSpy.mock.calls
+        .filter((call) => call[0] === 'abort')
+        .map((call) => call[1]);
+      expect(addedListeners.length).toBeGreaterThan(0);
+      expect(removedListeners).toEqual(addedListeners);
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+
+      const freshController = new AbortController();
+      const freshManager = new RetryManager(
+        { maxRetries: 3, delay: 10, signal: freshController.signal },
+        TEST_LOG_PATH
+      );
+      const freshResult = await freshManager.execute(async () => {
+        callCount++;
+        if (callCount < 2) {
+          throw retryableError();
+        }
+        return 'fresh-ok';
+      });
+
+      expect(freshResult.success).toBe(true);
+      expect(freshResult.data).toBe('fresh-ok');
+    });
+  });
 });
