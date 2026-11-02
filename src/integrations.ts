@@ -2,7 +2,7 @@
 
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { RetryManager } from './retryManager';
-import { RetryConfig, ReplayOptions, ReplayAllOptions, ReplayResult } from './types';
+import { RetryConfig, ReplayOptions, ReplayAllOptions, ReplayResult, FailureStore } from './types';
 import { isIdempotentMethod } from './utils';
 
 function loadAxios(): AxiosInstance {
@@ -19,8 +19,14 @@ export class AxiosRetry {
   private retryManager: RetryManager;
   private axios: AxiosInstance;
 
-  constructor(config?: RetryConfig, storePath?: string) {
-    this.retryManager = new RetryManager(config, storePath);
+  /**
+   * Creates an AxiosRetry instance with an optional custom FailureStore or log file path.
+   *
+   * @param config - Optional retry configuration.
+   * @param storeOrPath - Optional custom FailureStore instance or file path for the failure log.
+   */
+  constructor(config?: RetryConfig, storeOrPath?: string | FailureStore) {
+    this.retryManager = new RetryManager(config, storeOrPath);
     this.axios = loadAxios();
   }
 
@@ -140,8 +146,18 @@ export class AxiosRetry {
   }
 }
 
-export function createAxiosRetry(config?: RetryConfig, storePath?: string): AxiosRetry {
-  return new AxiosRetry(config, storePath);
+/**
+ * Creates an Axios client with retry support and pluggable failure logging.
+ *
+ * @param config - Optional retry configuration.
+ * @param storeOrPath - Optional custom FailureStore instance or file path for the failure log.
+ * @returns An AxiosRetry instance.
+ */
+export function createAxiosRetry(
+  config?: RetryConfig,
+  storeOrPath?: string | FailureStore
+): AxiosRetry {
+  return new AxiosRetry(config, storeOrPath);
 }
 
 function isJsonSerializableBody(body: any): boolean {
@@ -201,8 +217,14 @@ function normalizeHeaders(headers?: HeadersInit): Record<string, string> | undef
 export class FetchRetry {
   private retryManager: RetryManager;
 
-  constructor(config?: RetryConfig, storePath?: string) {
-    this.retryManager = new RetryManager(config, storePath);
+  /**
+   * Creates a FetchRetry instance with an optional custom FailureStore or log file path.
+   *
+   * @param config - Optional retry configuration.
+   * @param storeOrPath - Optional custom FailureStore instance or file path for the failure log.
+   */
+  constructor(config?: RetryConfig, storeOrPath?: string | FailureStore) {
+    this.retryManager = new RetryManager(config, storeOrPath);
   }
 
   async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -332,6 +354,16 @@ export class FetchRetry {
   }
 }
 
-export function createFetchRetry(config?: RetryConfig, storePath?: string): FetchRetry {
-  return new FetchRetry(config, storePath);
+/**
+ * Creates a Fetch client with retry support and pluggable failure logging.
+ *
+ * @param config - Optional retry configuration.
+ * @param storeOrPath - Optional custom FailureStore instance or file path for the failure log.
+ * @returns A FetchRetry instance.
+ */
+export function createFetchRetry(
+  config?: RetryConfig,
+  storeOrPath?: string | FailureStore
+): FetchRetry {
+  return new FetchRetry(config, storeOrPath);
 }

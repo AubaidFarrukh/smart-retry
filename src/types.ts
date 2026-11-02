@@ -55,6 +55,62 @@ export interface FileStoreConfig {
   maxFiles?: number;
 }
 
+/**
+ * Pluggable failure-log storage interface.
+ *
+ * Implementations persist and query failed HTTP requests that have exhausted
+ * all retry attempts.
+ *
+ * Concurrency note: Implementations own their concurrency safety for concurrent
+ * save() calls; read-modify-write stores must serialize internally.
+ */
+export interface FailureStore {
+  /**
+   * Persists a failed request that has exhausted all retries.
+   *
+   * @param request - The failed request details to log.
+   * @returns A promise that resolves when the request has been saved.
+   */
+  save(request: FailedRequest): Promise<void>;
+
+  /**
+   * Loads all failed requests currently held in the store.
+   *
+   * @returns A promise that resolves with an array of all failed requests.
+   */
+  loadAll(): Promise<FailedRequest[]>;
+
+  /**
+   * Finds a specific failed request by its unique identifier.
+   *
+   * @param id - The ID of the failed request to find.
+   * @returns A promise that resolves with the failed request, or undefined if not found.
+   */
+  findById(id: string): Promise<FailedRequest | undefined>;
+
+  /**
+   * Removes a failed request by its unique identifier.
+   *
+   * @param id - The ID of the failed request to remove.
+   * @returns A promise that resolves with true if the entry was removed, or false if not found.
+   */
+  remove(id: string): Promise<boolean>;
+
+  /**
+   * Removes all failed requests from the store.
+   *
+   * @returns A promise that resolves when the store has been cleared.
+   */
+  clear(): Promise<void>;
+
+  /**
+   * Returns the total count of failed requests currently held in the store.
+   *
+   * @returns A promise that resolves with the count of stored failed requests.
+   */
+  count(): Promise<number>;
+}
+
 export type RetryableFunction<T> = () => Promise<T>;
 
 export interface ReplayOptions {
