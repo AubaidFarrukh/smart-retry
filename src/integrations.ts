@@ -24,9 +24,13 @@ export class AxiosRetry {
     this.axios = loadAxios();
   }
 
-  async request<T = any>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    const result = await this.retryManager.execute<AxiosResponse<T>>(() =>
-      this.axios.request(config)
+  async request<T = any>(
+    config: AxiosRequestConfig,
+    override?: RetryConfig
+  ): Promise<AxiosResponse<T>> {
+    const result = await this.retryManager.execute<AxiosResponse<T>>(
+      () => this.axios.request(config),
+      override
     );
 
     if (!result.success) {
@@ -36,36 +40,47 @@ export class AxiosRetry {
     return result.data!;
   }
 
-  async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, method: 'GET', url });
+  async get<T = any>(
+    url: string,
+    config?: AxiosRequestConfig,
+    override?: RetryConfig
+  ): Promise<AxiosResponse<T>> {
+    return this.request<T>({ ...config, method: 'GET', url }, override);
   }
 
   async post<T = any>(
     url: string,
     data?: any,
-    config?: AxiosRequestConfig
+    config?: AxiosRequestConfig,
+    override?: RetryConfig
   ): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, method: 'POST', url, data });
+    return this.request<T>({ ...config, method: 'POST', url, data }, override);
   }
 
   async put<T = any>(
     url: string,
     data?: any,
-    config?: AxiosRequestConfig
+    config?: AxiosRequestConfig,
+    override?: RetryConfig
   ): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, method: 'PUT', url, data });
+    return this.request<T>({ ...config, method: 'PUT', url, data }, override);
   }
 
-  async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, method: 'DELETE', url });
+  async delete<T = any>(
+    url: string,
+    config?: AxiosRequestConfig,
+    override?: RetryConfig
+  ): Promise<AxiosResponse<T>> {
+    return this.request<T>({ ...config, method: 'DELETE', url }, override);
   }
 
   async patch<T = any>(
     url: string,
     data?: any,
-    config?: AxiosRequestConfig
+    config?: AxiosRequestConfig,
+    override?: RetryConfig
   ): Promise<AxiosResponse<T>> {
-    return this.request<T>({ ...config, method: 'PATCH', url, data });
+    return this.request<T>({ ...config, method: 'PATCH', url, data }, override);
   }
 
   getRetryManager(): RetryManager {
@@ -205,7 +220,11 @@ export class FetchRetry {
     this.retryManager = new RetryManager(config, storePath);
   }
 
-  async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  async fetch(
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    override?: RetryConfig
+  ): Promise<Response> {
     const requestConfig = {
       url: getRequestUrl(input),
       method: (init?.method || 'GET').toUpperCase(),
@@ -232,7 +251,7 @@ export class FetchRetry {
         error.config = requestConfig;
         throw error;
       }
-    });
+    }, override);
 
     if (!result.success) {
       throw result.error;
@@ -241,24 +260,39 @@ export class FetchRetry {
     return result.data!;
   }
 
-  async get(url: string, init?: RequestInit): Promise<Response> {
-    return this.fetch(url, { ...init, method: 'GET' });
+  async get(url: string, init?: RequestInit, override?: RetryConfig): Promise<Response> {
+    return this.fetch(url, { ...init, method: 'GET' }, override);
   }
 
-  async post(url: string, body?: any, init?: RequestInit): Promise<Response> {
-    return this.fetch(url, { ...buildBodyInit(body, init), method: 'POST' });
+  async post(
+    url: string,
+    body?: any,
+    init?: RequestInit,
+    override?: RetryConfig
+  ): Promise<Response> {
+    return this.fetch(url, { ...buildBodyInit(body, init), method: 'POST' }, override);
   }
 
-  async put(url: string, body?: any, init?: RequestInit): Promise<Response> {
-    return this.fetch(url, { ...buildBodyInit(body, init), method: 'PUT' });
+  async put(
+    url: string,
+    body?: any,
+    init?: RequestInit,
+    override?: RetryConfig
+  ): Promise<Response> {
+    return this.fetch(url, { ...buildBodyInit(body, init), method: 'PUT' }, override);
   }
 
-  async delete(url: string, init?: RequestInit): Promise<Response> {
-    return this.fetch(url, { ...init, method: 'DELETE' });
+  async delete(url: string, init?: RequestInit, override?: RetryConfig): Promise<Response> {
+    return this.fetch(url, { ...init, method: 'DELETE' }, override);
   }
 
-  async patch(url: string, body?: any, init?: RequestInit): Promise<Response> {
-    return this.fetch(url, { ...buildBodyInit(body, init), method: 'PATCH' });
+  async patch(
+    url: string,
+    body?: any,
+    init?: RequestInit,
+    override?: RetryConfig
+  ): Promise<Response> {
+    return this.fetch(url, { ...buildBodyInit(body, init), method: 'PATCH' }, override);
   }
 
   getRetryManager(): RetryManager {

@@ -125,11 +125,14 @@ Create an Axios client with retry support.
 
 **Methods:**
 
-- `get(url, config?)`
-- `post(url, data?, config?)`
-- `put(url, data?, config?)`
-- `delete(url, config?)`
-- `patch(url, data?, config?)`
+- `request(config, override?)`
+- `get(url, config?, override?)`
+- `post(url, data?, config?, override?)`
+- `put(url, data?, config?, override?)`
+- `delete(url, config?, override?)`
+- `patch(url, data?, config?, override?)`
+
+The trailing `override` parameter is a `RetryConfig`, NOT an `AxiosRequestConfig`, and must be passed as the last argument after the existing request config.
 
 ### `createFetchRetry(config?, storePath?)`
 
@@ -137,12 +140,14 @@ Create a Fetch client with retry support.
 
 **Methods:**
 
-- `fetch(input, init?)`
-- `get(url, init?)`
-- `post(url, body?, init?)`
-- `put(url, body?, init?)`
-- `delete(url, init?)`
-- `patch(url, body?, init?)`
+- `fetch(input, init?, override?)`
+- `get(url, init?, override?)`
+- `post(url, body?, init?, override?)`
+- `put(url, body?, init?, override?)`
+- `delete(url, init?, override?)`
+- `patch(url, body?, init?, override?)`
+
+The trailing `override` parameter is a `RetryConfig`, NOT a `RequestInit`, and must be passed as the last argument after the existing init options.
 
 ### Configuration Options
 
@@ -186,6 +191,34 @@ const axiosRetry = createAxiosRetry({
   },
 });
 ```
+
+### Per-call overrides
+
+You can override retry options for a single request on `RetryManager.execute()`, `AxiosRetry`, or `FetchRetry` by passing a trailing `RetryConfig` override.
+
+```typescript
+// RetryManager:
+const manager = new RetryManager({ maxRetries: 3, delay: 1000 });
+await manager.execute(() => callService(), { maxRetries: 1 });
+
+// AxiosRetry (override is passed as the last argument after AxiosRequestConfig):
+const axiosRetry = createAxiosRetry({ maxRetries: 3 });
+await axiosRetry.get('https://api.example.com/users', { timeout: 5000 }, { maxRetries: 1 });
+await axiosRetry.post('https://api.example.com/orders', { id: 1 }, undefined, { idempotent: true });
+
+// FetchRetry (override is passed as the last argument after RequestInit):
+const fetchRetry = createFetchRetry({ maxRetries: 3 });
+await fetchRetry.get('https://api.example.com/data', undefined, { maxRetries: 0 });
+await fetchRetry.post('https://api.example.com/orders', { id: 1 }, undefined, { idempotent: true });
+```
+
+**Override semantics:**
+
+- Each call merges the override over the instance configuration into a fresh object for that call only; the instance configuration is never mutated.
+- Passing `undefined` for a property leaves the instance value intact.
+- If `override.shouldRetry` is provided it is used verbatim; otherwise, if `override.idempotent` is defined and differs from the instance value, the retry predicate is recomputed via `defaultShouldRetry(error, override.idempotent)`; otherwise the instance predicate is retained.
+- A per-call `circuitBreaker` option is accepted in the merge but has no effect on the manager's breaker instance.
+- Setting `maxRetries: 0` (or negative) clamps to exactly one attempt with no retries.
 
 ### Access Failed Requests
 
