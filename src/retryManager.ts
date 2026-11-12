@@ -7,6 +7,7 @@ import {
   FileStoreConfig,
 } from './types';
 import { FileStore } from './fileStore';
+import { CircuitBreaker, CircuitState } from './circuitBreaker';
 import {
   generateId,
   calculateDelay,
@@ -14,26 +15,50 @@ import {
   sleep,
   getErrorMessage,
   getStatusCode,
+  parseRetryAfter,
 } from './utils';
 
 export class RetryManager {
   private config: Required<RetryConfig>;
   private store: FileStore;
+  private circuitBreaker?: CircuitBreaker;
 
   constructor(config: RetryConfig = {}, storePath?: string, storeConfig?: FileStoreConfig) {
     this.config = {
-      maxRetries: config.maxRetries ?? 3,
+      // Always make at least one attempt; 0 or negative values would otherwise
+      // skip the loop entirely and crash while logging an undefined error.
+      maxRetries: Math.max(1, config.maxRetries ?? 3),
       delay: config.delay ?? 2000,
       backoff: config.backoff ?? 'exponential',
       shouldRetry: config.shouldRetry ?? ((error) => defaultShouldRetry(error, config.idempotent)),
       onRetry: config.onRetry ?? (() => {}),
       idempotent: config.idempotent ?? false,
+      jitter: config.jitter ?? false,
+      circuitBreaker: config.circuitBreaker ?? {},
     };
 
     this.store = new FileStore(storePath, storeConfig);
+
+    if (config.circuitBreaker) {
+      this.circuitBreaker = new CircuitBreaker(config.circuitBreaker);
+    }
   }
 
   async execute<T>(fn: RetryableFunction<T>): Promise<RetryResult<T>> {
+    if (this.circuitBreaker && !this.circuitBreaker.canAttempt()) {
+      const error = new Error(
+        'Circuit breaker is open — too many consecutive failures, failing fast'
+      );
+      (error as any).circuitOpen = true;
+
+      return {
+        success: false,
+        error,
+        attempts: 0,
+        totalDuration: 0,
+      };
+    }
+
     const startTime = Date.now();
     let lastError: any;
     let attempts = 0;
@@ -44,6 +69,8 @@ export class RetryManager {
       try {
         const data = await fn();
         const totalDuration = Date.now() - startTime;
+
+        this.circuitBreaker?.recordSuccess();
 
         return {
           success: true,
@@ -59,7 +86,12 @@ export class RetryManager {
         }
 
         if (attempts < this.config.maxRetries) {
-          const delay = calculateDelay(this.config.delay, attempts, this.config.backoff);
+          const retryAfter = (error as any).response?.headers?.get?.('retry-after');
+          const retryAfterDelay = parseRetryAfter(retryAfter);
+
+          const delay =
+            retryAfterDelay ??
+            calculateDelay(this.config.delay, attempts, this.config.backoff, this.config.jitter);
           this.config.onRetry(attempts, error);
           await sleep(delay);
         }
@@ -68,6 +100,7 @@ export class RetryManager {
 
     const totalDuration = Date.now() - startTime;
 
+    this.circuitBreaker?.recordFailure();
     await this.logFailure(fn, lastError, attempts, totalDuration);
 
     return {
@@ -76,6 +109,10 @@ export class RetryManager {
       attempts,
       totalDuration,
     };
+  }
+
+  getCircuitState(): CircuitState | undefined {
+    return this.circuitBreaker?.getState();
   }
 
   private async logFailure(

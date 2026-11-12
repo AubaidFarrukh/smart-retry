@@ -36,6 +36,23 @@ describe('RetryManager', () => {
     expect(callCount).toBe(1);
   });
 
+  it('should still make one attempt when maxRetries is 0 or negative', async () => {
+    for (const maxRetries of [0, -1]) {
+      const zeroManager = new RetryManager({ maxRetries, delay: 1 }, TEST_LOG_PATH);
+      let calls = 0;
+
+      const result = await zeroManager.execute(async () => {
+        calls++;
+        throw new Error('boom');
+      });
+
+      expect(calls).toBe(1);
+      expect(result.success).toBe(false);
+      expect(result.attempts).toBe(1);
+      expect(result.error.message).toBe('boom');
+    }
+  });
+
   it('should retry on failure and eventually succeed', async () => {
     const fn = async () => {
       callCount++;
@@ -113,6 +130,12 @@ describe('RetryManager', () => {
   });
 
   it('should track total duration', async () => {
+    // Uses a larger delay (200ms) with a proportional threshold (150ms) rather
+    // than asserting against the exact configured delay: real timers can fire
+    // a hair before the requested delay elapses (sub-millisecond scheduling/
+    // Date.now() rounding), which made a tight 50ms-vs-50ms assertion flaky.
+    const timedManager = new RetryManager({ maxRetries: 3, delay: 200 }, TEST_LOG_PATH);
+
     const fn = async () => {
       callCount++;
       if (callCount < 2) {
@@ -123,10 +146,10 @@ describe('RetryManager', () => {
       return 'success';
     };
 
-    const result = await manager.execute(fn);
+    const result = await timedManager.execute(fn);
 
     expect(result.success).toBe(true);
-    expect(result.totalDuration).toBeGreaterThanOrEqual(50);
+    expect(result.totalDuration).toBeGreaterThanOrEqual(150);
   });
 
   it('should clear failed requests', async () => {
@@ -197,6 +220,85 @@ describe('RetryManager', () => {
 
       expect(result.success).toBe(true);
       expect(callCount).toBe(2);
+    });
+  });
+
+  describe('jitter config', () => {
+    it('executes retries with jitter enabled', async () => {
+      const jitterManager = new RetryManager(
+        { maxRetries: 3, delay: 50, jitter: true },
+        TEST_LOG_PATH
+      );
+
+      const fn = async () => {
+        callCount++;
+        if (callCount < 3) {
+          const error: any = new Error('Server error');
+          error.response = { status: 503 };
+          throw error;
+        }
+        return 'success';
+      };
+
+      const result = await jitterManager.execute(fn);
+
+      expect(result.success).toBe(true);
+      expect(result.attempts).toBe(3);
+      expect(callCount).toBe(3);
+    });
+  });
+
+  describe('circuitBreaker config', () => {
+    it('does not affect calls when not configured', () => {
+      expect(manager.getCircuitState()).toBeUndefined();
+    });
+
+    it('fails fast without calling fn once the circuit is open', async () => {
+      const breakerManager = new RetryManager(
+        { maxRetries: 1, delay: 0, circuitBreaker: { failureThreshold: 2 } },
+        TEST_LOG_PATH
+      );
+
+      const fn = async () => {
+        callCount++;
+        throw new Error('Down');
+      };
+
+      await breakerManager.execute(fn);
+      await breakerManager.execute(fn);
+      expect(breakerManager.getCircuitState()).toBe('open');
+      expect(callCount).toBe(2);
+
+      const result = await breakerManager.execute(fn);
+
+      expect(result.success).toBe(false);
+      expect((result.error as any).circuitOpen).toBe(true);
+      expect(callCount).toBe(2); // fn was not called a third time
+    });
+
+    it('allows a trial request after the cooldown and closes on success', async () => {
+      const breakerManager = new RetryManager(
+        { maxRetries: 1, delay: 0, circuitBreaker: { failureThreshold: 1, cooldownMs: 20 } },
+        TEST_LOG_PATH
+      );
+
+      const fn = async () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('Down');
+        }
+        return 'recovered';
+      };
+
+      await breakerManager.execute(fn);
+      expect(breakerManager.getCircuitState()).toBe('open');
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      const result = await breakerManager.execute(fn);
+
+      expect(result.success).toBe(true);
+      expect(breakerManager.getCircuitState()).toBe('closed');
     });
   });
 });

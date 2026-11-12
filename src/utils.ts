@@ -9,18 +9,52 @@ export function generateId(): string {
 export function calculateDelay(
   baseDelay: number,
   attempt: number,
-  backoff: 'exponential' | 'linear' | 'none'
+  backoff: 'exponential' | 'linear' | 'none',
+  jitter?: boolean
 ): number {
+  let delay: number;
   switch (backoff) {
     case 'exponential':
-      return baseDelay * Math.pow(2, attempt - 1);
+      delay = baseDelay * Math.pow(2, attempt - 1);
+      break;
     case 'linear':
-      return baseDelay * attempt;
+      delay = baseDelay * attempt;
+      break;
     case 'none':
-      return baseDelay;
+      delay = baseDelay;
+      break;
     default:
-      return baseDelay;
+      delay = baseDelay;
+      break;
   }
+
+  if (jitter) {
+    delay = delay * (0.5 + Math.random() * 0.5);
+  }
+
+  return delay;
+}
+
+export function parseRetryAfter(retryAfter: string | null): number | undefined {
+  if (!retryAfter) {
+    return undefined;
+  }
+
+  if (/^\d+$/.test(retryAfter)) {
+    return Number(retryAfter) * 1000;
+  }
+
+  if (/^[+-]?\d*\.?\d+$/.test(retryAfter)) {
+    return undefined;
+  }
+
+  const date = Date.parse(retryAfter);
+
+  if (!Number.isNaN(date)) {
+    return Math.max(0, date - Date.now());
+  }
+
+  return undefined;
 }
 
 const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']);
@@ -29,6 +63,14 @@ export function isIdempotentMethod(method?: string): boolean {
   if (!method) return true;
   return IDEMPOTENT_METHODS.has(method.toUpperCase());
 }
+
+const FETCH_RETRYABLE_CAUSE_CODES = new Set([
+  'EAI_AGAIN',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
 
 export function defaultShouldRetry(error: any, allowNonIdempotent = false): boolean {
   if (!error) return false;
@@ -43,6 +85,16 @@ export function defaultShouldRetry(error: any, allowNonIdempotent = false): bool
     error.code === 'ENOTFOUND' ||
     error.code === 'ECONNRESET' ||
     error.code === 'ECONNABORTED'
+  ) {
+    return true;
+  }
+
+  // Node's built-in fetch (undici) throws `TypeError('fetch failed')` and puts
+  // the underlying network error on `cause`, so check its code as well.
+  const causeCode = error.cause?.code;
+  if (
+    causeCode &&
+    (FETCH_RETRYABLE_CAUSE_CODES.has(causeCode) || defaultShouldRetry({ code: causeCode }, true))
   ) {
     return true;
   }

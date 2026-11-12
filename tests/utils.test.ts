@@ -5,6 +5,7 @@ import {
   sleep,
   getErrorMessage,
   getStatusCode,
+  parseRetryAfter,
 } from '../src/utils';
 
 describe('Utils', () => {
@@ -41,6 +42,74 @@ describe('Utils', () => {
       expect(calculateDelay(1000, 2, 'none')).toBe(1000);
       expect(calculateDelay(1000, 3, 'none')).toBe(1000);
     });
+
+    it('should apply jitter within 50% to 100% of calculated delay when jitter is true', () => {
+      for (let i = 0; i < 50; i++) {
+        const delay = calculateDelay(1000, 1, 'exponential', true);
+        expect(delay).toBeGreaterThanOrEqual(500);
+        expect(delay).toBeLessThanOrEqual(1000);
+      }
+
+      for (let i = 0; i < 50; i++) {
+        const delay = calculateDelay(1000, 3, 'exponential', true); // base 4000
+        expect(delay).toBeGreaterThanOrEqual(2000);
+        expect(delay).toBeLessThanOrEqual(4000);
+      }
+    });
+
+    it('should calculate deterministic jitter when Math.random is mocked', () => {
+      const originalRandom = Math.random;
+      try {
+        Math.random = () => 0;
+        expect(calculateDelay(1000, 1, 'exponential', true)).toBe(500);
+
+        Math.random = () => 1;
+        expect(calculateDelay(1000, 1, 'exponential', true)).toBe(1000);
+
+        Math.random = () => 0.5;
+        expect(calculateDelay(1000, 1, 'exponential', true)).toBe(750);
+      } finally {
+        Math.random = originalRandom;
+      }
+    });
+  });
+
+  describe('parseRetryAfter', () => {
+    it('parses delay in seconds to milliseconds', () => {
+      expect(parseRetryAfter('2')).toBe(2000);
+    });
+
+    it('parses an HTTP date into a delay', () => {
+      const now = Date.now();
+      const retryDate = new Date(now + 5000).toUTCString();
+
+      const delay = parseRetryAfter(retryDate);
+
+      expect(delay).toBeGreaterThanOrEqual(4000);
+      expect(delay).toBeLessThanOrEqual(5000);
+    });
+
+    it('returns undefined for an invalid Retry-After value', () => {
+      expect(parseRetryAfter('invalid')).toBeUndefined();
+    });
+
+    it('returns undefined for a non-integer delay in seconds', () => {
+      expect(parseRetryAfter('1.5')).toBeUndefined();
+    });
+
+    it('returns undefined for a negative delay in seconds', () => {
+      expect(parseRetryAfter('-2')).toBeUndefined();
+    });
+
+    it('returns undefined when Retry-After is missing', () => {
+      expect(parseRetryAfter(null)).toBeUndefined();
+    });
+
+    it('returns zero for an HTTP date in the past', () => {
+      const retryDate = new Date(Date.now() - 5000).toUTCString();
+
+      expect(parseRetryAfter(retryDate)).toBe(0);
+    });
   });
 
   describe('defaultShouldRetry', () => {
@@ -50,6 +119,28 @@ describe('Utils', () => {
       expect(defaultShouldRetry({ code: 'ENOTFOUND' })).toBe(true);
       expect(defaultShouldRetry({ code: 'ECONNRESET' })).toBe(true);
       expect(defaultShouldRetry({ code: 'ECONNABORTED' })).toBe(true);
+    });
+
+    it('should retry Node fetch network errors whose code is on `cause`', () => {
+      const fetchError = (code: string) =>
+        Object.assign(new TypeError('fetch failed'), { cause: { code } });
+
+      expect(defaultShouldRetry(fetchError('ECONNREFUSED'))).toBe(true);
+      expect(defaultShouldRetry(fetchError('ECONNRESET'))).toBe(true);
+      expect(defaultShouldRetry(fetchError('UND_ERR_CONNECT_TIMEOUT'))).toBe(true);
+      expect(defaultShouldRetry(fetchError('UND_ERR_SOCKET'))).toBe(true);
+      expect(defaultShouldRetry(fetchError('ERR_INVALID_URL'))).toBe(false);
+      expect(defaultShouldRetry(new TypeError('fetch failed'))).toBe(false);
+    });
+
+    it('should not retry a fetch network error for a non-idempotent method', () => {
+      const error = Object.assign(new TypeError('fetch failed'), {
+        cause: { code: 'ECONNREFUSED' },
+        config: { method: 'POST' },
+      });
+
+      expect(defaultShouldRetry(error)).toBe(false);
+      expect(defaultShouldRetry(error, true)).toBe(true);
     });
 
     it('should retry on 5xx errors', () => {
