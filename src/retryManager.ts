@@ -18,6 +18,14 @@ import {
   parseRetryAfter,
 } from './utils';
 
+const DEFAULT_REDACT_HEADERS = [
+  'authorization',
+  'proxy-authorization',
+  'cookie',
+  'set-cookie',
+  'x-api-key',
+];
+
 export class RetryManager {
   private config: Required<RetryConfig>;
   private store: FileStore;
@@ -32,6 +40,10 @@ export class RetryManager {
       backoff: config.backoff ?? 'exponential',
       shouldRetry: config.shouldRetry ?? ((error) => defaultShouldRetry(error, config.idempotent)),
       onRetry: config.onRetry ?? (() => {}),
+      redactHeaders: [...DEFAULT_REDACT_HEADERS, ...(config.redactHeaders ?? [])].map((name) =>
+        name.toLowerCase()
+      ),
+      logBody: config.logBody ?? true,
       idempotent: config.idempotent ?? false,
       jitter: config.jitter ?? false,
       circuitBreaker: config.circuitBreaker ?? {},
@@ -121,12 +133,16 @@ export class RetryManager {
     attempts: number,
     totalDuration: number
   ): Promise<void> {
+    const headers = error.config?.headers;
+    // AxiosHeaders omits disabled headers in toJSON(); Fetch already supplies a plain object.
+    const logHeaders: FailedRequest['headers'] =
+      typeof headers?.toJSON === 'function' ? headers.toJSON() : headers;
     const failedRequest: FailedRequest = {
       id: generateId(),
       url: this.extractUrl(fn, error),
       method: this.extractMethod(error),
-      headers: error.config?.headers,
-      body: error.config?.data,
+      headers: this.redactHeaders(logHeaders),
+      body: this.config.logBody ? error.config?.data : undefined,
       error: getErrorMessage(error),
       statusCode: getStatusCode(error),
       attempts,
@@ -135,6 +151,17 @@ export class RetryManager {
     };
 
     await this.store.save(failedRequest);
+  }
+
+  private redactHeaders(headers: FailedRequest['headers']): FailedRequest['headers'] {
+    if (!headers) return undefined;
+
+    return Object.fromEntries(
+      Object.entries(headers).map(([name, value]) => [
+        name,
+        this.config.redactHeaders.includes(name.toLowerCase()) ? '[REDACTED]' : value,
+      ])
+    );
   }
 
   private extractUrl(fn: RetryableFunction<any>, error: any): string {

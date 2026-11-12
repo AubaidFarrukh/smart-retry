@@ -153,6 +153,8 @@ interface RetryConfig {
   backoff?: 'exponential' | 'linear' | 'none'; // Default: 'exponential'
   shouldRetry?: (error: any) => boolean;
   onRetry?: (attempt: number, error: any) => void;
+  redactHeaders?: string[]; // Additional header names to redact from failure logs (case-insensitive)
+  logBody?: boolean; // Default: true — set false to omit request bodies from failure logs
   idempotent?: boolean; // Default: false — see "Which errors get retried by default?" below
   jitter?: boolean; // Default: false — adds randomization (50-100% of delay) to avoid thundering-herd retries
   circuitBreaker?: CircuitBreakerConfig; // Off by default — see "Circuit Breaker" below
@@ -219,7 +221,7 @@ const removed = await manager.removeFailedRequest('request-id');
 
 ### Replay Failed Requests
 
-Failures are logged with everything needed to retry them later — so you don't have to just know something failed, you can actually re-fire it:
+Logged failures can be replayed using their stored URL, method, and request details:
 
 ```typescript
 const client = createAxiosRetry();
@@ -244,6 +246,8 @@ await client.replayAll({
   dryRun: true, // report what would be replayed without making any requests
 });
 ```
+
+Sensitive headers are redacted in the log. Pass fresh credentials with `replay(id, { headers })` when replaying an authenticated request. This replaces the logged header map, so include any other headers the endpoint needs. If `logBody: false` was used, supply the body with `replay(id, { headers, body })`.
 
 A successfully replayed request is removed from the failure log by default (`removeOnSuccess: true`); a failed replay stays logged so it isn't lost.
 
@@ -353,6 +357,11 @@ By design. If a POST or PATCH fails after the server may have already processed 
 
 **Where does the failure log get written?**
 To `smart-retry-log.json` in the current working directory by default, or to a custom path passed as the second argument to `createAxiosRetry`/`createFetchRetry`/`createRetryManager`.
+
+**Are credentials stored in the failure log?**
+`Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, and `X-API-Key` values are replaced with `[REDACTED]`, regardless of header casing. Use `redactHeaders: ['X-Session-Key']` to extend this list; it does not replace the defaults. Request bodies are still logged by default — use `logBody: false` to omit them. These options only affect the log, not the request or the error returned to your code.
+
+Add `smart-retry-log*.json` to your project's `.gitignore` to keep failure logs and rotated files out of version control. URLs, error messages, and any bodies or other headers you choose to log can still contain sensitive data.
 
 **Is there a CLI to replay failed requests?**
 Yes — see the [CLI](#cli) section above (`npx smart-retry replay`), or use `replay()`/`replayAll()` programmatically (see [Replay Failed Requests](#replay-failed-requests)).

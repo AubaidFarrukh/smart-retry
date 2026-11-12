@@ -123,6 +123,28 @@ describe('FetchRetry failure logging', () => {
     expect(failure.statusCode).toBe(500);
   });
 
+  it('redacts Fetch headers without changing the request sent or replay credentials', async () => {
+    fetchMock = jest.fn().mockResolvedValue(new Response(null, { status: 503 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const fetchRetry = new FetchRetry({ maxRetries: 1 }, TEST_LOG_PATH);
+    const headers = { Authorization: 'Bearer test-token', 'X-Trace-Id': 'trace-1' };
+
+    await expect(fetchRetry.get('/orders', { headers })).rejects.toThrow('HTTP 503');
+
+    const [failure] = await fetchRetry.getRetryManager().getFailedRequests();
+    expect(failure.headers).toEqual({ authorization: '[REDACTED]', 'x-trace-id': 'trace-1' });
+    expect(fs.readFileSync(TEST_LOG_PATH, 'utf8')).not.toContain('test-token');
+    expect(fetchMock.mock.calls[0][1].headers).toEqual(headers);
+
+    fetchMock.mockResolvedValue(new Response('ok'));
+    await fetchRetry.replay(failure.id, { headers });
+    expect(fetchMock).toHaveBeenLastCalledWith('/orders', {
+      method: 'GET',
+      headers,
+      body: undefined,
+    });
+  });
+
   it('records the real url and method for a failed DELETE', async () => {
     fetchMock = jest.fn().mockResolvedValue(new Response(null, { status: 503 }));
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -427,6 +449,33 @@ describe('AxiosRetry', () => {
       'Request failed with status code 500'
     );
     expect(mockedAxios.request).toHaveBeenCalledTimes(3);
+  });
+
+  it('redacts AxiosHeaders while preserving their serialization and the original error', async () => {
+    const { AxiosHeaders } = jest.requireActual<typeof import('axios')>('axios');
+    const headers = new AxiosHeaders({
+      Authorization: 'Bearer test-token',
+      Cookie: 'session=test-cookie',
+      'X-Trace-Id': 'trace-1',
+      'Content-Type': false,
+    });
+    const error = Object.assign(new Error('Unavailable'), {
+      config: { url: '/orders', method: 'get', headers },
+      response: { status: 503 },
+    });
+    mockedAxios.request.mockRejectedValue(error);
+
+    await expect(axiosRetry.get('/orders', { headers })).rejects.toBe(error);
+
+    const [failure] = await axiosRetry.getRetryManager().getFailedRequests();
+    expect(failure.headers).toEqual({
+      Authorization: '[REDACTED]',
+      Cookie: '[REDACTED]',
+      'X-Trace-Id': 'trace-1',
+    });
+    expect(fs.readFileSync(AXIOS_TEST_LOG_PATH, 'utf8')).not.toContain('test-token');
+    expect(headers.get('Authorization')).toBe('Bearer test-token');
+    expect(headers.get('Content-Type')).toBe(false);
   });
 
   it('logs a failed request via getRetryManager().getFailedRequests() once retries are exhausted', async () => {
