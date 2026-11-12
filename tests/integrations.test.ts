@@ -659,3 +659,161 @@ describe('FetchRetry.replay', () => {
     expect(results.every((r) => r.success)).toBe(true);
   });
 });
+
+describe('FetchRetry AbortSignal passthrough', () => {
+  let fetchMock: jest.Mock;
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    if (fs.existsSync(TEST_LOG_PATH)) {
+      fs.unlinkSync(TEST_LOG_PATH);
+    }
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    if (fs.existsSync(TEST_LOG_PATH)) {
+      fs.unlinkSync(TEST_LOG_PATH);
+    }
+  });
+
+  it('passes the config signal to fetch on every attempt', async () => {
+    const controller = new AbortController();
+    fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry(
+      { maxRetries: 2, delay: 10, signal: controller.signal },
+      TEST_LOG_PATH
+    );
+
+    const response = await fetchRetry.get('/data');
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal);
+    expect(fetchMock.mock.calls[1][1].signal).toBe(controller.signal);
+  });
+
+  it('lets a per-request init.signal take precedence over the config signal', async () => {
+    const configController = new AbortController();
+    const initController = new AbortController();
+    fetchMock = jest.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry(
+      { maxRetries: 1, signal: configController.signal },
+      TEST_LOG_PATH
+    );
+
+    await fetchRetry.get('/data', { signal: initController.signal });
+
+    expect(fetchMock.mock.calls[0][1].signal).toBe(initController.signal);
+  });
+
+  it('leaves fetch without a signal when neither config nor init supplies one', async () => {
+    fetchMock = jest.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry({ maxRetries: 1 }, TEST_LOG_PATH);
+
+    await fetchRetry.get('/data');
+
+    expect(fetchMock.mock.calls[0][1].signal).toBeUndefined();
+  });
+
+  it('rejects with an AbortError and logs nothing when fetch aborts', async () => {
+    const controller = new AbortController();
+    const abortError = new DOMException('The operation was aborted', 'AbortError');
+    fetchMock = jest.fn().mockImplementation(async () => {
+      controller.abort();
+      throw abortError;
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry(
+      { maxRetries: 3, delay: 10, signal: controller.signal },
+      TEST_LOG_PATH
+    );
+
+    await expect(fetchRetry.get('/data')).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await fetchRetry.getRetryManager().getFailedRequestCount()).toBe(0);
+  });
+});
+
+describe('AxiosRetry AbortSignal passthrough', () => {
+  beforeEach(() => {
+    if (fs.existsSync(AXIOS_TEST_LOG_PATH)) {
+      fs.unlinkSync(AXIOS_TEST_LOG_PATH);
+    }
+    mockedAxios.request = jest.fn();
+  });
+
+  afterEach(() => {
+    if (fs.existsSync(AXIOS_TEST_LOG_PATH)) {
+      fs.unlinkSync(AXIOS_TEST_LOG_PATH);
+    }
+  });
+
+  it('passes the config signal into the axios request config on every attempt', async () => {
+    const controller = new AbortController();
+    const error: any = new Error('Request failed with status code 500');
+    error.response = { status: 500 };
+    error.config = { url: '/items', method: 'get' };
+    mockedAxios.request
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce({ data: { ok: true }, status: 200 });
+
+    const retryingAxios = new AxiosRetry(
+      { maxRetries: 2, delay: 10, signal: controller.signal },
+      AXIOS_TEST_LOG_PATH
+    );
+
+    const result = await retryingAxios.get('/items');
+
+    expect(result.status).toBe(200);
+    expect(mockedAxios.request).toHaveBeenCalledTimes(2);
+    expect(mockedAxios.request.mock.calls[0][0].signal).toBe(controller.signal);
+    expect(mockedAxios.request.mock.calls[1][0].signal).toBe(controller.signal);
+  });
+
+  it('lets a per-request config.signal take precedence over the config signal', async () => {
+    const configController = new AbortController();
+    const requestController = new AbortController();
+    mockedAxios.request.mockResolvedValue({ data: null, status: 200 });
+
+    const retryingAxios = new AxiosRetry(
+      { maxRetries: 1, signal: configController.signal },
+      AXIOS_TEST_LOG_PATH
+    );
+
+    await retryingAxios.request({ url: '/items', method: 'GET', signal: requestController.signal });
+
+    expect(mockedAxios.request).toHaveBeenLastCalledWith(
+      expect.objectContaining({ signal: requestController.signal })
+    );
+  });
+
+  it('rejects with an AbortError and logs nothing when axios aborts', async () => {
+    const controller = new AbortController();
+    const abortError: any = new DOMException('The operation was aborted', 'AbortError');
+    abortError.config = { url: '/items', method: 'get' };
+    mockedAxios.request.mockImplementation(async () => {
+      controller.abort();
+      throw abortError;
+    });
+
+    const retryingAxios = new AxiosRetry(
+      { maxRetries: 3, delay: 10, signal: controller.signal },
+      AXIOS_TEST_LOG_PATH
+    );
+
+    await expect(retryingAxios.get('/items')).rejects.toMatchObject({ name: 'AbortError' });
+    expect(mockedAxios.request).toHaveBeenCalledTimes(1);
+    expect(await retryingAxios.getRetryManager().getFailedRequestCount()).toBe(0);
+  });
+});
