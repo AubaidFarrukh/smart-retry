@@ -3,6 +3,11 @@
 import { CircuitBreakerConfig } from './circuitBreaker';
 
 export interface RetryConfig {
+  /**
+   * Total attempts, including the first call. `maxRetries: 3` means one
+   * initial call plus two retries, so the delay runs at most twice.
+   * Default: 3.
+   */
   maxRetries?: number;
   delay?: number;
   backoff?: 'exponential' | 'linear' | 'none';
