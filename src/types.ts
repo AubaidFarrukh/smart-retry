@@ -8,6 +8,10 @@ export interface RetryConfig {
   backoff?: 'exponential' | 'linear' | 'none';
   shouldRetry?: (error: any) => boolean;
   onRetry?: (attempt: number, error: any) => void;
+  /** Additional header names to redact from failure logs, case-insensitively. */
+  redactHeaders?: string[];
+  /** Include request bodies in failure logs. Default: true. */
+  logBody?: boolean;
   /**
    * By default, requests using a non-idempotent method (POST, PATCH) are not
    * retried, since the server may have already processed the request before

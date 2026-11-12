@@ -164,6 +164,74 @@ describe('RetryManager', () => {
     expect(await manager.getFailedRequestCount()).toBe(0);
   });
 
+  describe('failure log privacy', () => {
+    it.each([undefined, []])(
+      'redacts default headers with redactHeaders=%p',
+      async (redactHeaders) => {
+        const config = { maxRetries: 1, redactHeaders };
+        const privateManager = new RetryManager(config, TEST_LOG_PATH);
+        const headers = Object.freeze({
+          Authorization: 'Bearer test-token',
+          'pRoXy-AuThOrIzAtIoN': 'Basic test-proxy',
+          COOKIE: 'session=test-cookie',
+          'Set-Cookie': 'session=test-response-cookie',
+          'x-api-key': 'test-api-key',
+          'Content-Type': 'application/json',
+        });
+        const error = Object.assign(new Error('Unavailable'), {
+          config: { headers, data: '{"order":1}' },
+          response: { status: 503 },
+        });
+
+        const result = await privateManager.execute(async () => {
+          throw error;
+        });
+
+        const [failure] = await privateManager.getFailedRequests();
+        expect(failure.headers).toEqual({
+          Authorization: '[REDACTED]',
+          'pRoXy-AuThOrIzAtIoN': '[REDACTED]',
+          COOKIE: '[REDACTED]',
+          'Set-Cookie': '[REDACTED]',
+          'x-api-key': '[REDACTED]',
+          'Content-Type': 'application/json',
+        });
+        expect(failure.body).toBe('{"order":1}');
+        expect(result.error).toBe(error);
+        expect(error.config.headers).toBe(headers);
+        const log = fs.readFileSync(TEST_LOG_PATH, 'utf8');
+        for (const value of Object.values(headers).slice(0, 5)) {
+          expect(log).not.toContain(value);
+        }
+      }
+    );
+
+    it('extends redaction and can omit the body without changing the error', async () => {
+      const config = { maxRetries: 1, redactHeaders: ['X-Session-Key'], logBody: false };
+      const privateManager = new RetryManager(config, TEST_LOG_PATH);
+      const headers = { authorization: 'Bearer test-token', 'x-session-key': 'test-session' };
+      const body = { password: 'test-password' };
+      const error = Object.assign(new Error('Unavailable'), {
+        config: { headers, data: body },
+        response: { status: 503 },
+      });
+
+      const result = await privateManager.execute(async () => {
+        throw error;
+      });
+
+      const [failure] = await privateManager.getFailedRequests();
+      expect(failure.headers).toEqual({
+        authorization: '[REDACTED]',
+        'x-session-key': '[REDACTED]',
+      });
+      expect(failure).not.toHaveProperty('body');
+      expect(fs.readFileSync(TEST_LOG_PATH, 'utf8')).not.toContain('test-password');
+      expect(result.error).toBe(error);
+      expect(error.config).toEqual({ headers, data: body });
+    });
+  });
+
   describe('idempotent config', () => {
     it('does not retry a POST by default, even on a retryable status', async () => {
       const fn = async () => {
