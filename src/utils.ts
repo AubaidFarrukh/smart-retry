@@ -64,6 +64,14 @@ export function isIdempotentMethod(method?: string): boolean {
   return IDEMPOTENT_METHODS.has(method.toUpperCase());
 }
 
+const FETCH_RETRYABLE_CAUSE_CODES = new Set([
+  'EAI_AGAIN',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+
 export function defaultShouldRetry(error: any, allowNonIdempotent = false): boolean {
   if (!error) return false;
 
@@ -75,7 +83,18 @@ export function defaultShouldRetry(error: any, allowNonIdempotent = false): bool
     error.code === 'ECONNREFUSED' ||
     error.code === 'ETIMEDOUT' ||
     error.code === 'ENOTFOUND' ||
-    error.code === 'ECONNRESET'
+    error.code === 'ECONNRESET' ||
+    error.code === 'ECONNABORTED'
+  ) {
+    return true;
+  }
+
+  // Node's built-in fetch (undici) throws `TypeError('fetch failed')` and puts
+  // the underlying network error on `cause`, so check its code as well.
+  const causeCode = error.cause?.code;
+  if (
+    causeCode &&
+    (FETCH_RETRYABLE_CAUSE_CODES.has(causeCode) || defaultShouldRetry({ code: causeCode }, true))
   ) {
     return true;
   }
