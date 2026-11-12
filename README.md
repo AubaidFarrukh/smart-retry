@@ -148,7 +148,7 @@ Create a Fetch client with retry support.
 
 ```typescript
 interface RetryConfig {
-  maxRetries?: number; // Default: 3
+  maxRetries?: number; // Default: 3 — total attempts including the first call
   delay?: number; // Default: 2000ms
   backoff?: 'exponential' | 'linear' | 'none'; // Default: 'exponential'
   shouldRetry?: (error: any) => boolean;
@@ -317,7 +317,6 @@ The delays below are the base values before jitter is applied. With `jitter: tru
 Attempt 1: 2s
 Attempt 2: 4s
 Attempt 3: 8s
-Attempt 4: 16s
 ```
 
 **Linear:**
@@ -326,7 +325,6 @@ Attempt 4: 16s
 Attempt 1: 2s
 Attempt 2: 4s
 Attempt 3: 6s
-Attempt 4: 8s
 ```
 
 **None:**
