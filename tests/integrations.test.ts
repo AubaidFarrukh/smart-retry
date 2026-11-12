@@ -174,6 +174,81 @@ describe('FetchRetry failure logging', () => {
   });
 });
 
+describe('FetchRetry network errors and Request inputs', () => {
+  const originalFetch = global.fetch;
+
+  const networkError = (code: string) =>
+    Object.assign(new TypeError('fetch failed'), { cause: { code } });
+
+  beforeEach(() => {
+    if (fs.existsSync(TEST_LOG_PATH)) {
+      fs.unlinkSync(TEST_LOG_PATH);
+    }
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    if (fs.existsSync(TEST_LOG_PATH)) {
+      fs.unlinkSync(TEST_LOG_PATH);
+    }
+  });
+
+  it('retries a GET when Node fetch fails with a connection error', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockRejectedValueOnce(networkError('ECONNREFUSED'))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry({ maxRetries: 3, delay: 1 }, TEST_LOG_PATH);
+    const response = await fetchRetry.get('https://api.example.com/status');
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('takes the method from a Request object and does not retry its POST', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(new Response(null, { status: 503 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry({ maxRetries: 3, delay: 1 }, TEST_LOG_PATH);
+    const request = new Request('https://api.example.com/orders', {
+      method: 'POST',
+      body: JSON.stringify({ id: 1 }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    await expect(fetchRetry.fetch(request)).rejects.toThrow('HTTP 503');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const [failure] = await fetchRetry.getRetryManager().getFailedRequests();
+    expect(failure.method).toBe('POST');
+    expect(failure.headers).toMatchObject({ 'content-type': 'application/json' });
+  });
+
+  it('sends a fresh copy of a Request body on every retry', async () => {
+    const bodies: string[] = [];
+    const fetchMock = jest.fn(async (input: Request) => {
+      bodies.push(await input.text());
+      return bodies.length < 3
+        ? new Response(null, { status: 503 })
+        : new Response('ok', { status: 200 });
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const fetchRetry = new FetchRetry({ maxRetries: 3, delay: 1 }, TEST_LOG_PATH);
+    const request = new Request('https://api.example.com/items/1', {
+      method: 'PUT',
+      body: 'payload',
+    });
+
+    const response = await fetchRetry.fetch(request);
+
+    expect(response.status).toBe(200);
+    expect(bodies).toEqual(['payload', 'payload', 'payload']);
+  });
+});
+
 describe('FetchRetry Retry-After', () => {
   let fetchMock: jest.Mock;
   const originalFetch = global.fetch;

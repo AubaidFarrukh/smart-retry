@@ -36,6 +36,23 @@ describe('RetryManager', () => {
     expect(callCount).toBe(1);
   });
 
+  it('should still make one attempt when maxRetries is 0 or negative', async () => {
+    for (const maxRetries of [0, -1]) {
+      const zeroManager = new RetryManager({ maxRetries, delay: 1 }, TEST_LOG_PATH);
+      let calls = 0;
+
+      const result = await zeroManager.execute(async () => {
+        calls++;
+        throw new Error('boom');
+      });
+
+      expect(calls).toBe(1);
+      expect(result.success).toBe(false);
+      expect(result.attempts).toBe(1);
+      expect(result.error.message).toBe('boom');
+    }
+  });
+
   it('should retry on failure and eventually succeed', async () => {
     const fn = async () => {
       callCount++;

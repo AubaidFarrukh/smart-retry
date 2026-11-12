@@ -118,6 +118,29 @@ describe('Utils', () => {
       expect(defaultShouldRetry({ code: 'ETIMEDOUT' })).toBe(true);
       expect(defaultShouldRetry({ code: 'ENOTFOUND' })).toBe(true);
       expect(defaultShouldRetry({ code: 'ECONNRESET' })).toBe(true);
+      expect(defaultShouldRetry({ code: 'ECONNABORTED' })).toBe(true);
+    });
+
+    it('should retry Node fetch network errors whose code is on `cause`', () => {
+      const fetchError = (code: string) =>
+        Object.assign(new TypeError('fetch failed'), { cause: { code } });
+
+      expect(defaultShouldRetry(fetchError('ECONNREFUSED'))).toBe(true);
+      expect(defaultShouldRetry(fetchError('ECONNRESET'))).toBe(true);
+      expect(defaultShouldRetry(fetchError('UND_ERR_CONNECT_TIMEOUT'))).toBe(true);
+      expect(defaultShouldRetry(fetchError('UND_ERR_SOCKET'))).toBe(true);
+      expect(defaultShouldRetry(fetchError('ERR_INVALID_URL'))).toBe(false);
+      expect(defaultShouldRetry(new TypeError('fetch failed'))).toBe(false);
+    });
+
+    it('should not retry a fetch network error for a non-idempotent method', () => {
+      const error = Object.assign(new TypeError('fetch failed'), {
+        cause: { code: 'ECONNREFUSED' },
+        config: { method: 'POST' },
+      });
+
+      expect(defaultShouldRetry(error)).toBe(false);
+      expect(defaultShouldRetry(error, true)).toBe(true);
     });
 
     it('should retry on 5xx errors', () => {
