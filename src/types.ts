@@ -3,6 +3,7 @@
 import { CircuitBreakerConfig } from './circuitBreaker';
 
 export interface RetryConfig {
+  /** Total attempts, including the first call. Default: 3. */
   maxRetries?: number;
   delay?: number;
   backoff?: 'exponential' | 'linear' | 'none';
