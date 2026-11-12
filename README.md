@@ -148,7 +148,7 @@ Create a Fetch client with retry support.
 
 ```typescript
 interface RetryConfig {
-  maxRetries?: number; // Default: 3
+  maxRetries?: number; // Total attempts, including the first call. Default: 3.
   delay?: number; // Default: 2000ms
   backoff?: 'exponential' | 'linear' | 'none'; // Default: 'exponential'
   shouldRetry?: (error: any) => boolean;
@@ -309,30 +309,27 @@ The CLI replays over `fetch`, so it requires Node 18 or later regardless of whic
 
 ## Backoff Strategies
 
-The delays below are the base values before jitter is applied. With `jitter: true`, each delay is randomized to 50–100% of the corresponding backoff delay.
+With the defaults `maxRetries: 3` and `delay: 2000`, the first attempt starts immediately and up to two retries can follow. The examples show the base delay before each retry. With `jitter: true`, each delay is randomized to 50–100% of its base value.
 
 **Exponential (default):**
 
 ```
-Attempt 1: 2s
-Attempt 2: 4s
-Attempt 3: 8s
-Attempt 4: 16s
+Before attempt 2: 2s
+Before attempt 3: 4s
 ```
 
 **Linear:**
 
 ```
-Attempt 1: 2s
-Attempt 2: 4s
-Attempt 3: 6s
-Attempt 4: 8s
+Before attempt 2: 2s
+Before attempt 3: 4s
 ```
 
 **None:**
 
 ```
-All attempts: 2s fixed delay
+Before attempt 2: 2s
+Before attempt 3: 2s
 ```
 
 ## FAQ
