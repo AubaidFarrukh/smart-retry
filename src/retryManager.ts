@@ -54,7 +54,9 @@ export class RetryManager {
     storeConfig?: FileStoreConfig
   ) {
     this.config = {
-      maxRetries: config.maxRetries ?? 3,
+      // Always make at least one attempt; 0 or negative values would otherwise
+      // skip the loop entirely and crash while logging an undefined error.
+      maxRetries: Math.max(1, config.maxRetries ?? 3),
       delay: config.delay ?? 2000,
       backoff: config.backoff ?? 'exponential',
       shouldRetry: config.shouldRetry ?? ((error) => defaultShouldRetry(error, config.idempotent)),

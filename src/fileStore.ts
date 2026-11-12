@@ -4,6 +4,9 @@ import fs from 'fs';
 import path from 'path';
 import { FailedRequest, FileStoreConfig, FailureStore } from './types';
 
+const writeQueues = new Map<string, Promise<void>>();
+const noop = () => {};
+
 export class FileStore implements FailureStore {
   private filePath: string;
   private maxFileSizeBytes?: number;
@@ -14,6 +17,17 @@ export class FileStore implements FailureStore {
     this.maxFileSizeBytes = storeConfig?.maxFileSizeBytes;
     this.maxFiles = storeConfig?.maxFiles ?? 5;
     this.ensureFileExists();
+  }
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const key = path.resolve(this.filePath);
+    const tail = writeQueues.get(key) ?? Promise.resolve();
+    const run = tail.then(
+      () => operation(),
+      () => operation()
+    );
+    writeQueues.set(key, run.then(noop, noop));
+    return run;
   }
 
   private ensureFileExists(): void {
@@ -27,15 +41,17 @@ export class FileStore implements FailureStore {
   }
 
   async save(request: FailedRequest): Promise<void> {
-    try {
-      this.rotateIfNeeded();
+    return this.enqueue(async () => {
+      try {
+        this.rotateIfNeeded();
 
-      const logs = await this.loadAll();
-      logs.push(request);
-      fs.writeFileSync(this.filePath, JSON.stringify(logs, null, 2), 'utf-8');
-    } catch {
-      // best-effort logging; ignore write failures
-    }
+        const logs = await this.loadAll();
+        logs.push(request);
+        fs.writeFileSync(this.filePath, JSON.stringify(logs, null, 2), 'utf-8');
+      } catch {
+        // best-effort logging; ignore write failures
+      }
+    });
   }
 
   private rotateIfNeeded(): void {
@@ -51,6 +67,8 @@ export class FileStore implements FailureStore {
     }
   }
 
+  // Reads are intentionally unqueued: callers that await a write promise
+  // observe a consistent state, and fs.readFileSync is synchronous.
   async loadAll(): Promise<FailedRequest[]> {
     try {
       const content = fs.readFileSync(this.filePath, 'utf-8');
@@ -66,27 +84,31 @@ export class FileStore implements FailureStore {
   }
 
   async remove(id: string): Promise<boolean> {
-    try {
-      const logs = await this.loadAll();
-      const filtered = logs.filter((log) => log.id !== id);
+    return this.enqueue(async () => {
+      try {
+        const logs = await this.loadAll();
+        const filtered = logs.filter((log) => log.id !== id);
 
-      if (filtered.length === logs.length) {
+        if (filtered.length === logs.length) {
+          return false;
+        }
+
+        fs.writeFileSync(this.filePath, JSON.stringify(filtered, null, 2), 'utf-8');
+        return true;
+      } catch {
         return false;
       }
-
-      fs.writeFileSync(this.filePath, JSON.stringify(filtered, null, 2), 'utf-8');
-      return true;
-    } catch {
-      return false;
-    }
+    });
   }
 
   async clear(): Promise<void> {
-    try {
-      fs.writeFileSync(this.filePath, JSON.stringify([], null, 2), 'utf-8');
-    } catch {
-      // best-effort logging; ignore write failures
-    }
+    return this.enqueue(async () => {
+      try {
+        fs.writeFileSync(this.filePath, JSON.stringify([], null, 2), 'utf-8');
+      } catch {
+        // best-effort logging; ignore write failures
+      }
+    });
   }
 
   async count(): Promise<number> {
