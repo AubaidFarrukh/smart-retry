@@ -5,6 +5,7 @@ import {
   RetryableFunction,
   FailedRequest,
   FileStoreConfig,
+  FailureStore,
 } from './types';
 import { FileStore } from './fileStore';
 import { CircuitBreaker, CircuitState } from './circuitBreaker';
@@ -18,12 +19,40 @@ import {
   parseRetryAfter,
 } from './utils';
 
+function isFailureStore(store: unknown): store is FailureStore {
+  if (typeof store !== 'object' || store === null) {
+    return false;
+  }
+  const candidate = store as Record<string, unknown>;
+  return (
+    typeof candidate.save === 'function' &&
+    typeof candidate.loadAll === 'function' &&
+    typeof candidate.findById === 'function' &&
+    typeof candidate.remove === 'function' &&
+    typeof candidate.clear === 'function' &&
+    typeof candidate.count === 'function'
+  );
+}
+
 export class RetryManager {
   private config: Required<RetryConfig>;
-  private store: FileStore;
+  private store: FailureStore;
   private circuitBreaker?: CircuitBreaker;
 
-  constructor(config: RetryConfig = {}, storePath?: string, storeConfig?: FileStoreConfig) {
+  /**
+   * Creates a new RetryManager instance.
+   *
+   * @param config - Optional retry configuration.
+   * @param storeOrPath - Optional custom FailureStore instance, or a file path
+   *   for the default FileStore.
+   * @param storeConfig - Optional file store configuration. FileStore-only:
+   *   must not be provided with a custom FailureStore.
+   */
+  constructor(
+    config: RetryConfig = {},
+    storeOrPath?: string | FailureStore,
+    storeConfig?: FileStoreConfig
+  ) {
     this.config = {
       // Always make at least one attempt; 0 or negative values would otherwise
       // skip the loop entirely and crash while logging an undefined error.
@@ -37,7 +66,18 @@ export class RetryManager {
       circuitBreaker: config.circuitBreaker ?? {},
     };
 
-    this.store = new FileStore(storePath, storeConfig);
+    if (typeof storeOrPath === 'string' || storeOrPath === undefined) {
+      this.store = new FileStore(storeOrPath, storeConfig);
+    } else if (isFailureStore(storeOrPath)) {
+      if (storeConfig !== undefined) {
+        throw new Error(
+          'storeConfig is FileStore-only and cannot be used with a custom FailureStore'
+        );
+      }
+      this.store = storeOrPath;
+    } else {
+      throw new TypeError('Expected a string file path or a FailureStore instance');
+    }
 
     if (config.circuitBreaker) {
       this.circuitBreaker = new CircuitBreaker(config.circuitBreaker);
@@ -134,7 +174,11 @@ export class RetryManager {
       timestamp: new Date().toISOString(),
     };
 
-    await this.store.save(failedRequest);
+    try {
+      await this.store.save(failedRequest);
+    } catch {
+      // best-effort logging; ignore write failures
+    }
   }
 
   private extractUrl(fn: RetryableFunction<any>, error: any): string {
@@ -171,7 +215,14 @@ export class RetryManager {
     return this.store.count();
   }
 
-  getLogFilePath(): string {
-    return this.store.getFilePath();
+  /**
+   * Returns the file path where failures are logged, or undefined if using
+   * a non-file FailureStore.
+   */
+  getLogFilePath(): string | undefined {
+    if (this.store instanceof FileStore) {
+      return this.store.getFilePath();
+    }
+    return undefined;
   }
 }

@@ -2,12 +2,12 @@
 
 import fs from 'fs';
 import path from 'path';
-import { FailedRequest, FileStoreConfig } from './types';
+import { FailedRequest, FileStoreConfig, FailureStore } from './types';
 
 const writeQueues = new Map<string, Promise<void>>();
 const noop = () => {};
 
-export class FileStore {
+export class FileStore implements FailureStore {
   private filePath: string;
   private maxFileSizeBytes?: number;
   private maxFiles: number;

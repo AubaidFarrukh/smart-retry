@@ -119,7 +119,7 @@ Retry any async function.
 
 **Returns:** `Promise<RetryResult<T>>`
 
-### `createAxiosRetry(config?, storePath?)`
+### `createAxiosRetry(config?, storeOrPath?)`
 
 Create an Axios client with retry support.
 
@@ -131,7 +131,7 @@ Create an Axios client with retry support.
 - `delete(url, config?)`
 - `patch(url, data?, config?)`
 
-### `createFetchRetry(config?, storePath?)`
+### `createFetchRetry(config?, storeOrPath?)`
 
 Create a Fetch client with retry support.
 
@@ -216,6 +216,68 @@ await manager.clearFailedRequests();
 
 const removed = await manager.removeFailedRequest('request-id');
 ```
+
+### Custom Failure Storage
+
+By default, exhausted failures are saved to `smart-retry-log.json` on disk using `FileStore`. You can provide a custom storage backend (such as an in-memory store, database, or external cache) by implementing the `FailureStore` interface:
+
+```typescript
+export interface FailureStore {
+  save(request: FailedRequest): Promise<void>;
+  loadAll(): Promise<FailedRequest[]>;
+  findById(id: string): Promise<FailedRequest | undefined>;
+  remove(id: string): Promise<boolean>;
+  clear(): Promise<void>;
+  count(): Promise<number>;
+}
+```
+
+Pass a custom store instance as the second argument to `createAxiosRetry`, `createFetchRetry`, `createRetryManager`, or directly to `new RetryManager(...)`:
+
+```typescript
+import { createFetchRetry, FailureStore, FailedRequest } from '@aubaid/smart-retry';
+
+class InMemoryStore implements FailureStore {
+  private requests: FailedRequest[] = [];
+
+  async save(request: FailedRequest): Promise<void> {
+    this.requests.push(request);
+  }
+
+  async loadAll(): Promise<FailedRequest[]> {
+    return [...this.requests];
+  }
+
+  async findById(id: string): Promise<FailedRequest | undefined> {
+    return this.requests.find((r) => r.id === id);
+  }
+
+  async remove(id: string): Promise<boolean> {
+    const prevCount = this.requests.length;
+    this.requests = this.requests.filter((r) => r.id !== id);
+    return this.requests.length < prevCount;
+  }
+
+  async clear(): Promise<void> {
+    this.requests = [];
+  }
+
+  async count(): Promise<number> {
+    return this.requests.length;
+  }
+}
+
+const store = new InMemoryStore();
+const client = createFetchRetry({ maxRetries: 3 }, store);
+// or: const manager = createRetryManager({ maxRetries: 3 }, store);
+// or: const manager = new RetryManager({ maxRetries: 3 }, store);
+```
+
+Key behaviors to note:
+
+- **Best-effort logging:** `RetryManager` wraps `store.save()` in a `try/catch`. If a custom store's `save()` rejects, the error is swallowed and will never cause `execute()` to throw. Read, remove, and count delegation methods (`getFailedRequests`, `getFailedRequest`, `removeFailedRequest`, `getFailedRequestCount`) still propagate errors to callers unchanged.
+- **Log file path:** Calling `getLogFilePath()` on a manager using a custom (non-file) store returns `undefined`.
+- **Concurrency:** Implementations own their concurrency safety for concurrent `save()` calls; read-modify-write stores must serialize internally.
 
 ### Replay Failed Requests
 
@@ -352,7 +414,7 @@ For Fetch requests, when a retryable response includes a valid `Retry-After` hea
 By design. If a POST or PATCH fails after the server may have already processed it (a lost response, a mid-request network drop), blindly retrying can cause a duplicate side effect — a double charge, a duplicate order, and so on. GET, PUT, DELETE, HEAD, and OPTIONS are safe to retry and do so by default; POST and PATCH don't, unless you pass `idempotent: true` in `RetryConfig` (e.g. because your endpoint is safe to call more than once, such as via an idempotency key) or supply your own `shouldRetry`.
 
 **Where does the failure log get written?**
-To `smart-retry-log.json` in the current working directory by default, or to a custom path passed as the second argument to `createAxiosRetry`/`createFetchRetry`/`createRetryManager`.
+To `smart-retry-log.json` in the current working directory by default, or to a custom path passed as the second argument to `createAxiosRetry`/`createFetchRetry`/`createRetryManager`. If a custom `FailureStore` is provided, failures are handled by that store instead of disk.
 
 **Is there a CLI to replay failed requests?**
 Yes — see the [CLI](#cli) section above (`npx smart-retry replay`), or use `replay()`/`replayAll()` programmatically (see [Replay Failed Requests](#replay-failed-requests)).
