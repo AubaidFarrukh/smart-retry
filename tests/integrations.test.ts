@@ -659,3 +659,150 @@ describe('FetchRetry.replay', () => {
     expect(results.every((r) => r.success)).toBe(true);
   });
 });
+
+describe('AxiosRetry per-call RetryConfig override', () => {
+  let axiosRetry: AxiosRetry;
+  const LOG_PATH = path.join(__dirname, 'axios-override-test.json');
+
+  beforeEach(() => {
+    if (fs.existsSync(LOG_PATH)) {
+      fs.unlinkSync(LOG_PATH);
+    }
+    mockedAxios.request = jest.fn();
+    axiosRetry = new AxiosRetry({ maxRetries: 3, delay: 0 }, LOG_PATH);
+  });
+
+  afterEach(() => {
+    if (fs.existsSync(LOG_PATH)) {
+      fs.unlinkSync(LOG_PATH);
+    }
+  });
+
+  it('changes attempt counts for that call only via get and post overrides', async () => {
+    const error: any = new Error('Server error');
+    error.response = { status: 500, statusText: 'Internal Server Error' };
+    error.config = { method: 'get', url: '/data' };
+    mockedAxios.request.mockRejectedValue(error);
+
+    // Per-call maxRetries override on GET changes attempt counts for that call only
+    await expect(axiosRetry.get('/data', undefined, { maxRetries: 1 })).rejects.toThrow();
+    expect(mockedAxios.request).toHaveBeenCalledTimes(1);
+
+    mockedAxios.request.mockClear();
+    await expect(axiosRetry.get('/data')).rejects.toThrow();
+    expect(mockedAxios.request).toHaveBeenCalledTimes(3);
+
+    // Per-call maxRetries: 0 on a GET -> exactly one axios call
+    mockedAxios.request.mockClear();
+    await expect(axiosRetry.get('/data', undefined, { maxRetries: 0 })).rejects.toThrow();
+    expect(mockedAxios.request).toHaveBeenCalledTimes(1);
+
+    // Per-call idempotent override on post(): POST not retried without it, retried with { idempotent: true }
+    const postError: any = new Error('POST error');
+    postError.response = { status: 500, statusText: 'Internal Server Error' };
+    postError.config = { method: 'post', url: '/data' };
+    mockedAxios.request.mockReset();
+    mockedAxios.request.mockRejectedValue(postError);
+
+    await expect(axiosRetry.post('/data', { a: 1 })).rejects.toThrow();
+    expect(mockedAxios.request).toHaveBeenCalledTimes(1);
+
+    mockedAxios.request.mockClear();
+    await expect(
+      axiosRetry.post('/data', { a: 1 }, undefined, { idempotent: true })
+    ).rejects.toThrow();
+    expect(mockedAxios.request).toHaveBeenCalledTimes(3);
+
+    // Next plain call is not retried
+    mockedAxios.request.mockClear();
+    await expect(axiosRetry.post('/data', { a: 1 })).rejects.toThrow();
+    expect(mockedAxios.request).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not alter the axios request config sent to axios.request', async () => {
+    mockedAxios.request.mockResolvedValue({ data: { ok: true }, status: 200 });
+
+    const requestConfig = { headers: { Authorization: 'Bearer token' }, timeout: 5000 };
+    await axiosRetry.get('/protected', requestConfig, { maxRetries: 1, delay: 0 });
+
+    expect(mockedAxios.request).toHaveBeenCalledWith({
+      headers: { Authorization: 'Bearer token' },
+      timeout: 5000,
+      method: 'GET',
+      url: '/protected',
+    });
+  });
+});
+
+describe('FetchRetry per-call RetryConfig override', () => {
+  let fetchRetry: FetchRetry;
+  let fetchMock: jest.Mock;
+  const originalFetch = global.fetch;
+  const LOG_PATH = path.join(__dirname, 'fetch-override-test.json');
+
+  beforeEach(() => {
+    if (fs.existsSync(LOG_PATH)) {
+      fs.unlinkSync(LOG_PATH);
+    }
+    fetchRetry = new FetchRetry({ maxRetries: 3, delay: 0 }, LOG_PATH);
+    fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    if (fs.existsSync(LOG_PATH)) {
+      fs.unlinkSync(LOG_PATH);
+    }
+  });
+
+  it('changes attempt counts for that call only: maxRetries: 0 and idempotent override on post', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 500, statusText: 'Server Error' }));
+
+    // get with trailing override { maxRetries: 0 } -> exactly one fetch call
+    await expect(fetchRetry.get('/status', undefined, { maxRetries: 0 })).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // plain get uses instance maxRetries 3
+    fetchMock.mockClear();
+    await expect(fetchRetry.get('/status')).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    // post not retried without override
+    fetchMock.mockClear();
+    await expect(fetchRetry.post('/orders', { item: 'widget' })).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // post retried with { idempotent: true } override
+    fetchMock.mockClear();
+    await expect(
+      fetchRetry.post('/orders', { item: 'widget' }, undefined, { idempotent: true })
+    ).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    // subsequent plain post not retried
+    fetchMock.mockClear();
+    await expect(fetchRetry.post('/orders', { item: 'widget' })).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not alter the fetch init actually sent', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+    const init = { headers: { 'X-Custom-Header': 'custom-val' } };
+    await fetchRetry.post('/orders', { item: 'widget' }, init, { maxRetries: 1, delay: 0 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, sentInit] = fetchMock.mock.calls[0];
+    expect(sentInit).toEqual({
+      method: 'POST',
+      body: JSON.stringify({ item: 'widget' }),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Custom-Header': 'custom-val',
+      },
+    });
+    expect(sentInit.maxRetries).toBeUndefined();
+    expect(sentInit.delay).toBeUndefined();
+  });
+});

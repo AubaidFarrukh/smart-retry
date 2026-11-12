@@ -44,7 +44,7 @@ export class RetryManager {
     }
   }
 
-  async execute<T>(fn: RetryableFunction<T>): Promise<RetryResult<T>> {
+  async execute<T>(fn: RetryableFunction<T>, override?: RetryConfig): Promise<RetryResult<T>> {
     if (this.circuitBreaker && !this.circuitBreaker.canAttempt()) {
       const error = new Error(
         'Circuit breaker is open — too many consecutive failures, failing fast'
@@ -59,11 +59,40 @@ export class RetryManager {
       };
     }
 
+    const cleanOverride: Partial<RetryConfig> = {};
+    if (override) {
+      for (const [key, value] of Object.entries(override)) {
+        if (value !== undefined) {
+          (cleanOverride as Record<string, unknown>)[key] = value;
+        }
+      }
+    }
+
+    const effective: Required<RetryConfig> = {
+      ...this.config,
+      ...cleanOverride,
+    };
+
+    if (override) {
+      if (override.shouldRetry !== undefined) {
+        effective.shouldRetry = override.shouldRetry;
+      } else if (
+        override.idempotent !== undefined &&
+        override.idempotent !== this.config.idempotent
+      ) {
+        effective.shouldRetry = (error: any) => defaultShouldRetry(error, override.idempotent);
+      } else {
+        effective.shouldRetry = this.config.shouldRetry;
+      }
+    }
+
+    effective.maxRetries = Math.max(1, effective.maxRetries);
+
     const startTime = Date.now();
     let lastError: any;
     let attempts = 0;
 
-    while (attempts < this.config.maxRetries) {
+    while (attempts < effective.maxRetries) {
       attempts++;
 
       try {
@@ -81,18 +110,18 @@ export class RetryManager {
       } catch (error) {
         lastError = error;
 
-        if (!this.config.shouldRetry(error)) {
+        if (!effective.shouldRetry(error)) {
           break;
         }
 
-        if (attempts < this.config.maxRetries) {
+        if (attempts < effective.maxRetries) {
           const retryAfter = (error as any).response?.headers?.get?.('retry-after');
           const retryAfterDelay = parseRetryAfter(retryAfter);
 
           const delay =
             retryAfterDelay ??
-            calculateDelay(this.config.delay, attempts, this.config.backoff, this.config.jitter);
-          this.config.onRetry(attempts, error);
+            calculateDelay(effective.delay, attempts, effective.backoff, effective.jitter);
+          effective.onRetry(attempts, error);
           await sleep(delay);
         }
       }
