@@ -3,6 +3,10 @@
 import { CircuitBreakerConfig } from './circuitBreaker';
 
 export interface RetryConfig {
+  /**
+   * Total attempts, including the first call. Default: 3.
+   * A value of 3 means 1 initial call + 2 retries.
+   */
   maxRetries?: number;
   delay?: number;
   backoff?: 'exponential' | 'linear' | 'none';
