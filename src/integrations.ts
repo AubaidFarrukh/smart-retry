@@ -177,6 +177,10 @@ function buildBodyInit(body: unknown, init?: RequestInit): RequestInit {
   };
 }
 
+function isRequest(input: RequestInfo | URL): input is Request {
+  return typeof Request !== 'undefined' && input instanceof Request;
+}
+
 function getRequestUrl(input: RequestInfo | URL): string {
   if (typeof input === 'string') {
     return input;
@@ -206,16 +210,18 @@ export class FetchRetry {
   }
 
   async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const request = isRequest(input) ? input : undefined;
     const requestConfig = {
       url: getRequestUrl(input),
-      method: (init?.method || 'GET').toUpperCase(),
-      headers: normalizeHeaders(init?.headers),
+      method: (init?.method || request?.method || 'GET').toUpperCase(),
+      headers: normalizeHeaders(init?.headers ?? request?.headers),
       data: init?.body,
     };
 
     const result = await this.retryManager.execute<Response>(async () => {
       try {
-        const response = await fetch(input, init);
+        // A Request's body can only be read once, so give each attempt its own copy.
+        const response = await fetch(request ? request.clone() : input, init);
 
         if (!response.ok) {
           const error: any = new Error(`HTTP ${response.status}: ${response.statusText}`);
