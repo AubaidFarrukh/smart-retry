@@ -118,6 +118,7 @@ describe('Utils', () => {
       expect(defaultShouldRetry({ code: 'ETIMEDOUT' })).toBe(true);
       expect(defaultShouldRetry({ code: 'ENOTFOUND' })).toBe(true);
       expect(defaultShouldRetry({ code: 'ECONNRESET' })).toBe(true);
+      expect(defaultShouldRetry({ code: 'ECONNABORTED' })).toBe(true);
     });
 
     it('should retry Node fetch network errors whose code is on `cause`', () => {
